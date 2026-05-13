@@ -1,0 +1,32 @@
+{
+  "name": "@guard-sdk/pricing",
+  "version": "0.1.0",
+  "description": "Pricing resolver utilities for guard-sdk.",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.2",
+    "@typescript/native-preview": "7.0.0-dev.20260509.2",
+    "bumpp": "^11.1.0",
+    "typescript": "^6.0.3",
+    "vite-plus": "^0.1.20"
+  }
+}

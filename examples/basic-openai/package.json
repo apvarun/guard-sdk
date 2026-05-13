@@ -1,0 +1,13 @@
+{
+  "name": "@guard-sdk/example-basic-openai",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node ./index.mjs",
+    "build": "node --check ./index.mjs",
+    "test": "node --check ./index.mjs"
+  },
+  "dependencies": {
+    "@guard-sdk/openai": "workspace:*"
+  }
+}
