@@ -9,6 +9,7 @@ import {
   createMemoryLogger,
 } from "@guard-sdk/core";
 import { createJsonFileLogger } from "../../core/src/index.ts";
+import { createSQLiteLogger, readUsageReport } from "../../storage-sqlite/src/index.ts";
 import { createPricingResolver } from "@guard-sdk/pricing";
 import { createOpenAIGuard } from "../src/index.ts";
 
@@ -214,6 +215,38 @@ test("supports json file logger in adapter config", async () => {
     expect(log.provider).toBe("openai");
     expect(log.model).toBe("gpt-4.1-mini");
     expect(log.status).toBe("success");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("supports sqlite logger in adapter config", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-openai-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    const client = {
+      chat: {
+        completions: {
+          create: async () => ({
+            usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+          }),
+        },
+      },
+    };
+
+    const logger = await createSQLiteLogger({ dbPath });
+    const guarded = createOpenAIGuard(client, {
+      logger,
+      name: "openai-sqlite-log",
+    });
+
+    await guarded.chat.completions.create({ model: "gpt-4.1-mini", messages: [] });
+
+    const report = readUsageReport({ dbPath });
+    expect(report.totalRuns).toBe(1);
+    expect(report.totalCalls).toBe(1);
+    expect(report.mostExpensiveRun?.name).toBe("openai-sqlite-log");
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

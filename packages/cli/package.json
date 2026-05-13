@@ -1,8 +1,11 @@
 {
-  "name": "@guard-sdk/pricing",
+  "name": "@guard-sdk/cli",
   "version": "0.2.0",
-  "description": "Pricing resolver utilities for guard-sdk.",
+  "description": "CLI tools for guard-sdk.",
   "license": "MIT",
+  "bin": {
+    "guard": "./dist/index.mjs"
+  },
   "files": [
     "dist"
   ],
@@ -21,6 +24,10 @@
     "test": "vp test",
     "check": "vp check",
     "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "@guard-sdk/core": "workspace:*",
+    "@guard-sdk/storage-sqlite": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

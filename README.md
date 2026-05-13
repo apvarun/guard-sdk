@@ -7,6 +7,8 @@ Cost limits, timeouts, and circuit breakers for AI agents.
 - `@guard-sdk/core`: generic guard runtime (`guard.run`, `guard.createRun`)
 - `@guard-sdk/pricing`: pricing resolver utilities
 - `@guard-sdk/openai`: OpenAI chat completions adapter
+- `@guard-sdk/storage-sqlite`: SQLite logger + report query helpers
+- `@guard-sdk/cli`: CLI reporting (`guard report`)
 
 ## Install
 
@@ -41,6 +43,28 @@ console.log(usage);
 ```
 
 `createJsonFileLogger` writes newline-delimited JSON (NDJSON), one usage record per line.
+
+## SQLite Logger + CLI Report (v0.2)
+
+```ts
+import { guard } from "@guard-sdk/core";
+import { createSQLiteLogger } from "@guard-sdk/storage-sqlite";
+
+const logger = await createSQLiteLogger({
+  dbPath: "./.guard/usage.db",
+});
+
+await guard.run(async () => callLLM(), {
+  name: "daily-summary",
+  logger,
+});
+```
+
+```bash
+guard report --db ./.guard/usage.db
+guard report --db ./.guard/usage.db --status blocked
+guard report --db ./.guard/usage.db --from 2026-05-01T00:00:00.000Z --to 2026-05-31T23:59:59.999Z
+```
 
 ### Timeout semantics (MVP)
 
