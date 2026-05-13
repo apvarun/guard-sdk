@@ -1,5 +1,5 @@
 {
-  "name": "@guard-sdk/example-basic-openai",
+  "name": "@guard-sdk/example-basic-anthropic",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "node --check ./index.mjs"
   },
   "dependencies": {
-    "@guard-sdk/openai": "workspace:*",
-    "openai": ">=6.0.0"
+    "@anthropic-ai/sdk": ">=0.61.0 <1",
+    "@guard-sdk/anthropic": "workspace:*"
   }
 }

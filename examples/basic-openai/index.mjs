@@ -1,33 +1,9 @@
+import OpenAI from "openai";
 import { createOpenAIGuard } from "@guard-sdk/openai";
 
-// Mocked OpenAI-like client to keep the example runnable without API keys.
-const openai = {
-  chat: {
-    completions: {
-      async create(params) {
-        return {
-          id: "chatcmpl_demo",
-          model: params.model,
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: "Guarded OpenAI call completed.",
-              },
-              finish_reason: "stop",
-            },
-          ],
-          usage: {
-            prompt_tokens: 120,
-            completion_tokens: 30,
-            total_tokens: 150,
-          },
-        };
-      },
-    },
-  },
-};
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 const guardedOpenAI = createOpenAIGuard(openai, {
   name: "basic-openai-example",

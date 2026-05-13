@@ -1,6 +1,6 @@
 {
   "name": "@guard-sdk/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cost limits, timeouts, and circuit breakers for AI agents.",
   "license": "MIT",
   "files": [

@@ -7,6 +7,8 @@ Cost limits, timeouts, and circuit breakers for AI agents.
 - `@guard-sdk/core`: generic guard runtime (`guard.run`, `guard.createRun`)
 - `@guard-sdk/pricing`: pricing resolver utilities
 - `@guard-sdk/openai`: OpenAI chat completions adapter
+- `@guard-sdk/anthropic`: Anthropic messages adapter (create + stream finalization)
+- `@guard-sdk/vercel-ai`: Vercel AI SDK adapter (`generateText`, `streamText`)
 - `@guard-sdk/storage-sqlite`: SQLite logger + report query helpers
 - `@guard-sdk/cli`: CLI reporting (`guard report`)
 
@@ -116,11 +118,70 @@ const response = await guardedOpenAI.chat.completions.create({
 console.log(response.usage);
 ```
 
+## Quickstart (Anthropic Adapter)
+
+```ts
+import Anthropic from "@anthropic-ai/sdk";
+import { createAnthropicGuard } from "@guard-sdk/anthropic";
+
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const guardedAnthropic = createAnthropicGuard(anthropic, {
+  name: "anthropic-message",
+  maxCostUsd: 1,
+  maxTokens: 5000,
+  timeoutMs: 30000,
+});
+
+const response = await guardedAnthropic.messages.create({
+  model: "claude-opus-4-1-20250805",
+  messages: [{ role: "user", content: "Summarize this report." }],
+});
+
+console.log(response.usage);
+```
+
+## Quickstart (Vercel AI SDK Adapter)
+
+```ts
+import { generateText, streamText } from "ai";
+import { createVercelAIGuard } from "@guard-sdk/vercel-ai";
+
+const guardedAI = createVercelAIGuard(
+  { generateText, streamText },
+  {
+    name: "vercel-ai-text",
+    model: "gpt-4o-mini",
+    maxCostUsd: 1,
+    maxTokens: 5000,
+    timeoutMs: 30000,
+  },
+);
+
+const generated = await guardedAI.generateText({
+  model: "gpt-4o-mini",
+  prompt: "Summarize this report.",
+});
+
+console.log(generated.usage);
+
+const streamed = guardedAI.streamText({
+  model: "gpt-4o-mini",
+  prompt: "Stream a short summary.",
+});
+
+for await (const chunk of streamed.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
 ## Examples
 
 - `examples/basic`
 - `examples/agent-loop`
 - `examples/basic-openai`
+- `examples/basic-anthropic`
+- `examples/basic-vercel-ai`
 
 ## Development
 

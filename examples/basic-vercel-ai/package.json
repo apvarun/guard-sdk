@@ -1,5 +1,5 @@
 {
-  "name": "@guard-sdk/example-basic-openai",
+  "name": "@guard-sdk/example-basic-vercel-ai",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,8 @@
     "test": "node --check ./index.mjs"
   },
   "dependencies": {
-    "@guard-sdk/openai": "workspace:*",
-    "openai": ">=6.0.0"
+    "@ai-sdk/openai": ">=1.0.0",
+    "@guard-sdk/vercel-ai": "workspace:*",
+    "ai": ">=5.0.0"
   }
 }

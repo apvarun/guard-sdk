@@ -1,11 +1,8 @@
 {
-  "name": "@guard-sdk/cli",
+  "name": "@guard-sdk/vercel-ai",
   "version": "0.3.0",
-  "description": "CLI tools for guard-sdk.",
+  "description": "Vercel AI SDK adapter for guard-sdk.",
   "license": "MIT",
-  "bin": {
-    "guard": "./dist/index.mjs"
-  },
   "files": [
     "dist"
   ],
@@ -26,14 +23,17 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@guard-sdk/core": "workspace:*",
-    "@guard-sdk/storage-sqlite": "workspace:*"
+    "@guard-sdk/core": "workspace:*"
   },
   "devDependencies": {
+    "@guard-sdk/pricing": "workspace:*",
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.20"
+  },
+  "peerDependencies": {
+    "ai": ">=5.0.0"
   }
 }
