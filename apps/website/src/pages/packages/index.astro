@@ -1,0 +1,34 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import PackageList from "../../components/PackageList.astro";
+import SiteHeader from "../../components/SiteHeader.astro";
+import { getAllPackageDocs } from "../../lib/package-docs";
+
+const packageDocs = await getAllPackageDocs();
+const packageItems = packageDocs.map((pkg) => ({
+  name: pkg.name,
+  description: pkg.readmeSummary,
+  href: `/packages/${pkg.slug}`,
+  meta: `v${pkg.version} · ${pkg.exports.length} exports`,
+}));
+---
+
+<BaseLayout
+  title="guard-sdk packages"
+  description="Package reference for guard-sdk with docs and generated API summaries."
+>
+  <main class="page">
+    <SiteHeader currentPath={Astro.url.pathname} />
+
+    <section class="section">
+      <h1 class="page-title">Package Docs</h1>
+      <p class="section-copy">
+        Each package page explains what it does, what it depends on, and which symbols it exports.
+      </p>
+      <PackageList packages={packageItems} />
+    </section>
+
+    <Footer />
+  </main>
+</BaseLayout>

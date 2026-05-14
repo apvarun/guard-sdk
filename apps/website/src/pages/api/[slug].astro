@@ -1,0 +1,98 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import Breadcrumbs from "../../components/Breadcrumbs.astro";
+import CodeBlock from "../../components/CodeBlock.astro";
+import SiteHeader from "../../components/SiteHeader.astro";
+import {
+  getAllPackageDocs,
+  getPackageDocBySlug,
+  type ApiSymbol,
+  type PackageDoc,
+} from "../../lib/package-docs";
+
+export async function getStaticPaths() {
+  const packages = await getAllPackageDocs();
+  return packages.map((pkg) => ({
+    params: { slug: pkg.slug },
+  }));
+}
+
+const slug = Astro.params.slug ?? "";
+const pkg = await getPackageDocBySlug(slug);
+
+if (!pkg) {
+  return Astro.redirect("/api");
+}
+
+function toApiSpec(packageDoc: PackageDoc) {
+  const spec = {
+    package: packageDoc.name,
+    version: packageDoc.version,
+    exports: packageDoc.exports.map((symbol: ApiSymbol) => ({
+      kind: symbol.kind,
+      name: symbol.name,
+      source: symbol.source ?? null,
+    })),
+  };
+
+  return JSON.stringify(spec, null, 2);
+}
+---
+
+<BaseLayout title={`${pkg.name} API spec`} description={`Generated API structure for ${pkg.name}.`}>
+  <main class="page">
+    <SiteHeader currentPath={Astro.url.pathname} />
+    <Breadcrumbs
+      items={[
+        { label: "Home", href: "/" },
+        { label: "API Spec", href: "/api" },
+        { label: pkg.name },
+      ]}
+    />
+
+    <section class="section">
+      <h1 class="page-title">{pkg.name} API</h1>
+      <p class="section-copy">
+        This spec is generated from package entry exports and updates on every website build.
+      </p>
+      <p>
+        Need package context first? Visit <a href={`/packages/${pkg.slug}`}>{pkg.name} package docs</a>.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>Exported Symbols</h2>
+      <table class="api-table">
+        <thead>
+          <tr>
+            <th>Kind</th>
+            <th>Name</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {pkg.exports.map((symbol) => (
+            <tr>
+              <td>{symbol.kind}</td>
+              <td><code>{symbol.name}</code></td>
+              <td>{symbol.source ?? "entry"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2>Export Declarations</h2>
+      <CodeBlock code={pkg.exportStatements.join("\n")} />
+    </section>
+
+    <section class="section">
+      <h2>JSON Spec</h2>
+      <CodeBlock code={toApiSpec(pkg)} />
+    </section>
+
+    <Footer />
+  </main>
+</BaseLayout>

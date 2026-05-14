@@ -1,0 +1,19 @@
+---
+interface Props {
+  packages: { name: string; description: string; href?: string; meta?: string }[];
+}
+
+const { packages } = Astro.props;
+---
+
+<div class="package-list">
+  {packages.map((pkg) => (
+    <article class="package-row">
+      <h3>
+        {pkg.href ? <a href={pkg.href}>{pkg.name}</a> : pkg.name}
+      </h3>
+      <p>{pkg.description}</p>
+      {pkg.meta ? <p class="package-meta">{pkg.meta}</p> : null}
+    </article>
+  ))}
+</div>

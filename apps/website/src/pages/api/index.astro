@@ -1,0 +1,39 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import Footer from "../../components/Footer.astro";
+import SiteHeader from "../../components/SiteHeader.astro";
+import { getAllPackageDocs } from "../../lib/package-docs";
+
+const packages = await getAllPackageDocs();
+---
+
+<BaseLayout
+  title="guard-sdk API spec"
+  description="Generated API structure from each guard-sdk package entry file."
+>
+  <main class="page">
+    <SiteHeader currentPath={Astro.url.pathname} />
+
+    <section class="section">
+      <h1 class="page-title">API Spec</h1>
+      <p class="section-copy">
+        This index is generated from package entry exports. Open a package to inspect the exact
+        declarations the package publishes.
+      </p>
+
+      <div class="api-list">
+        {packages.map((pkg) => (
+          <article class="api-row">
+            <h2>
+              <a href={`/api/${pkg.slug}`}>{pkg.name}</a>
+            </h2>
+            <p>{pkg.description}</p>
+            <p class="note">{pkg.exports.length} exported symbols</p>
+          </article>
+        ))}
+      </div>
+    </section>
+
+    <Footer />
+  </main>
+</BaseLayout>

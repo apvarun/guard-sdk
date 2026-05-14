@@ -1,0 +1,101 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Hero from "../components/Hero.astro";
+import CodeBlock from "../components/CodeBlock.astro";
+import Footer from "../components/Footer.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import { getAllPackageDocs } from "../lib/package-docs";
+
+const quickstartCode = `import { createJsonFileLogger, guard } from "@guard-sdk/core";
+
+const { data, usage } = await guard.run(
+  async () => callLLM(),
+  {
+    name: "summarize-report",
+    maxCostUsd: 1,
+    maxTokens: 5000,
+    maxCalls: 3,
+    maxRetries: 2,
+    timeoutMs: 30000,
+    logger: createJsonFileLogger({
+      filePath: "./.guard/usage.jsonl",
+    }),
+  },
+);`;
+
+const packageDocs = await getAllPackageDocs();
+const packages = packageDocs.map((pkg) => ({
+  name: pkg.name,
+  href: `/packages/${pkg.slug}`,
+}));
+---
+
+<BaseLayout
+  title="guard-sdk | Runtime Guards For AI Agents"
+  description="guard-sdk adds cost limits, timeout budgets, and circuit breakers to AI and agent calls."
+>
+  <main class="page">
+    <SiteHeader currentPath={Astro.url.pathname} showBrandIcon={false} />
+
+    <Hero
+      title="Runtime guards for AI agents."
+      description="A small TypeScript layer that adds cost caps, token limits, timeouts, and retry controls around existing model or tool calls."
+    />
+
+    <section class="section" id="why">
+      <h2>Why</h2>
+      <p>
+        Agent calls can loop, retry, and quietly burn budget. <code>guard-sdk</code>
+        centralizes runtime limits so teams stop scattering budget checks across every provider
+        integration.
+      </p>
+      <ul class="feature-list">
+        <li><code>guard.run()</code> wraps any async call in bounded execution.</li>
+        <li><code>guard.createRun()</code> tracks multi-step loops with shared limits.</li>
+        <li>Usage summaries include retries, call count, duration, and cost estimate.</li>
+      </ul>
+    </section>
+
+    <section class="section" id="quickstart">
+      <h2>Quickstart</h2>
+      <CodeBlock code={quickstartCode} />
+      <p class="note">
+        <code>timeoutMs</code> is best-effort: guard rejects on timeout, but the underlying IO must
+        support cancellation for hard interruption.
+      </p>
+    </section>
+
+    <section class="section" id="packages">
+      <h2>Packages</h2>
+      <p>
+        Browse package details in <a href="/packages">Docs</a>.
+      </p>
+      <ul class="feature-list">
+        {packages.map((pkg) => (
+          <li>
+            <a href={pkg.href}>{pkg.name}</a>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section class="section" id="api">
+      <h2>API Structure</h2>
+      <p>
+        The API reference pages are generated from each package entry file at build time. Use
+        <a href="/api"> API Spec</a> to inspect exports grouped by package.
+      </p>
+    </section>
+
+    <section class="section" id="roadmap">
+      <h2>Roadmap</h2>
+      <ul class="roadmap-list">
+        <li>v0.4: tokenizer hooks, dry-run mode, clearer trust messaging</li>
+        <li>v0.5: OpenTelemetry integration and structured JSON reporting</li>
+        <li>v0.6: multi-agent orchestration guards</li>
+      </ul>
+    </section>
+
+    <Footer />
+  </main>
+</BaseLayout>

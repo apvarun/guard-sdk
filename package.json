@@ -21,7 +21,6 @@
     "vite-plus": "catalog:"
   },
   "overrides": {
-    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "engines": {

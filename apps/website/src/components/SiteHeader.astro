@@ -1,0 +1,49 @@
+---
+import GuardIcon from "./GuardIcon.astro";
+
+interface NavItem {
+  label: string;
+  href: string;
+}
+
+interface Props {
+  currentPath: string;
+  showBrandIcon?: boolean;
+}
+
+const { currentPath, showBrandIcon = true } = Astro.props;
+
+const navItems: NavItem[] = [
+  { label: "Home", href: "/" },
+  { label: "API", href: "/api" },
+];
+
+function isActive(href: string) {
+  if (href === "/") {
+    return currentPath === "/";
+  }
+
+  return currentPath === href || currentPath.startsWith(`${href}/`);
+}
+---
+
+<header class="site-header">
+  <a href="/" class="brand" aria-label="guard-sdk homepage">
+    {showBrandIcon ? <GuardIcon size={18} /> : null}
+    <span>guard-sdk</span>
+  </a>
+
+  <nav aria-label="Primary">
+    <ul class="site-nav">
+      {navItems.map((item) => (
+        <li>
+          <a href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
+            {item.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+
+  <a href="/packages" class="cta-link">Docs</a>
+</header>
