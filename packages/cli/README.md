@@ -6,6 +6,7 @@ CLI for reporting on guard-sdk usage data.
 
 ```bash
 guard report --db ./.guard/usage.db
+guard report --db ./.guard/usage.db --json
 ```
 
 ## Report filters
@@ -16,5 +17,6 @@ guard report \
   --from 2026-05-01T00:00:00.000Z \
   --to 2026-05-31T23:59:59.999Z \
   --name summarize-report \
-  --status blocked
+  --status blocked \
+  --json
 ```

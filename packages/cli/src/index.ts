@@ -16,6 +16,7 @@ type CliIo = {
 export type ReportCommandOptions = {
   dbPath: string;
   tableName?: string;
+  json?: boolean;
   filters: UsageReportFilters;
 };
 
@@ -47,6 +48,7 @@ export function parseReportArgs(args: string[]): ReportCommandOptions {
   const filters: UsageReportFilters = {};
   let dbPath: string | undefined;
   let tableName: string | undefined;
+  let json = false;
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -102,6 +104,11 @@ export function parseReportArgs(args: string[]): ReportCommandOptions {
         break;
       }
 
+      case "--json": {
+        json = true;
+        break;
+      }
+
       default:
         throw new Error(`Unknown flag: ${arg}`);
     }
@@ -118,6 +125,7 @@ export function parseReportArgs(args: string[]): ReportCommandOptions {
   return {
     dbPath,
     tableName,
+    json,
     filters,
   };
 }
@@ -142,7 +150,7 @@ export function formatUsageReport(summary: UsageReportSummary): string {
 
 export const REPORT_USAGE = [
   "Usage:",
-  "  guard report --db <path> [--from <ISO8601>] [--to <ISO8601>] [--name <runName>] [--status <success|failed|blocked|timeout>] [--table <tableName>]",
+  "  guard report --db <path> [--from <ISO8601>] [--to <ISO8601>] [--name <runName>] [--status <success|failed|blocked|timeout>] [--table <tableName>] [--json]",
 ].join("\n");
 
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
@@ -167,7 +175,11 @@ export async function runCli(argv: string[], io: CliIo): Promise<number> {
       filters: options.filters,
     });
 
-    io.stdout(formatUsageReport(summary));
+    if (options.json) {
+      io.stdout(JSON.stringify(summary));
+    } else {
+      io.stdout(formatUsageReport(summary));
+    }
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown CLI error";

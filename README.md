@@ -10,6 +10,7 @@ Cost limits, timeouts, and circuit breakers for AI agents.
 - `@guard-sdk/anthropic`: Anthropic messages adapter (create + stream finalization)
 - `@guard-sdk/vercel-ai`: Vercel AI SDK adapter (`generateText`, `streamText`)
 - `@guard-sdk/storage-sqlite`: SQLite logger + report query helpers
+- `@guard-sdk/otel`: OpenTelemetry logger integration (spans + logs)
 - `@guard-sdk/cli`: CLI reporting (`guard report`)
 
 ## Install
@@ -145,9 +146,51 @@ await guard.run(async () => callLLM(), {
 
 ```bash
 guard report --db ./.guard/usage.db
+guard report --db ./.guard/usage.db --json
 guard report --db ./.guard/usage.db --status blocked
 guard report --db ./.guard/usage.db --from 2026-05-01T00:00:00.000Z --to 2026-05-31T23:59:59.999Z
 ```
+
+`--json` outputs the same report summary as a single JSON object for automation/pipelines.
+
+## OpenTelemetry Logger (v0.5)
+
+```ts
+import { guard } from "@guard-sdk/core";
+import { createOpenTelemetryLogger } from "@guard-sdk/otel";
+
+const logger = createOpenTelemetryLogger({
+  tracer,
+  logEmitter,
+  traceSampleRate: 1,
+  logSampleRate: 1,
+});
+
+await guard.run(async () => callLLM(), {
+  name: "summary-job",
+  provider: "openai",
+  model: "gpt-4.1-mini",
+  logger,
+});
+
+const run = guard.createRun({
+  name: "agent-session",
+  logger,
+});
+
+await run.call("step-1", async () => callLLM());
+await run.call("step-2", async () => callLLM());
+console.log(run.summary());
+```
+
+Telemetry fields are emitted with a stable, versioned schema (`guard.schema_version = "1.0"`).
+Minor releases add fields without changing existing key meanings.
+
+## Incident Query Cookbook
+
+Vendor-neutral incident query examples and log/trace field mappings are documented in:
+
+- [`docs/observability-cookbook.md`](./docs/observability-cookbook.md)
 
 ### Timeout semantics (MVP)
 
@@ -263,6 +306,7 @@ for await (const chunk of streamed.textStream) {
 - `examples/basic-openai`
 - `examples/basic-anthropic`
 - `examples/basic-vercel-ai`
+- `examples/basic-otel`
 
 ## Development
 

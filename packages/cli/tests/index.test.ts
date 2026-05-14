@@ -64,6 +64,11 @@ test("parseReportArgs parses filters", () => {
   expect(parsed.filters.from).toBe("2026-05-10T12:00:00.000Z");
 });
 
+test("parseReportArgs supports --json", () => {
+  const parsed = parseReportArgs(["--db", "usage.db", "--json"]);
+  expect(parsed.json).toBe(true);
+});
+
 test("formatUsageReport renders deterministic output", () => {
   const output = formatUsageReport({
     totalRuns: 3,
@@ -157,6 +162,48 @@ test("runCli supports status filter", async () => {
     expect(code).toBe(0);
     expect(state.stdout[0]).toContain("Total runs: 1");
     expect(state.stdout[0]).toContain("Blocked calls: 1");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("runCli outputs single JSON summary object with --json", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-cli-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    const logger = await createSQLiteLogger({ dbPath });
+
+    await guard.run(async () => ({ usage: { total_tokens: 20 } }), {
+      name: "json-success-run",
+      logger,
+      maxRetries: 0,
+    });
+
+    await expect(
+      guard.run(async () => "blocked", {
+        name: "json-blocked-run",
+        logger,
+        maxCalls: 0,
+      }),
+    ).rejects.toThrow();
+
+    const { io, state } = createCaptureIo();
+    const code = await runCli(["report", "--db", dbPath, "--status", "blocked", "--json"], io);
+
+    expect(code).toBe(0);
+    expect(state.stderr).toHaveLength(0);
+    expect(state.stdout).toHaveLength(1);
+
+    const summary = JSON.parse(state.stdout[0]) as {
+      totalRuns: number;
+      blockedCalls: number;
+      totalCalls: number;
+    };
+
+    expect(summary.totalRuns).toBe(1);
+    expect(summary.blockedCalls).toBe(1);
+    expect(summary.totalCalls).toBe(0);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

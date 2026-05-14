@@ -1,7 +1,7 @@
 {
-  "name": "@guard-sdk/anthropic",
+  "name": "@guard-sdk/otel",
   "version": "0.5.0",
-  "description": "Anthropic adapter for guard-sdk.",
+  "description": "OpenTelemetry logger integration for guard-sdk.",
   "license": "MIT",
   "files": [
     "dist"
@@ -26,14 +26,10 @@
     "@guard-sdk/core": "workspace:*"
   },
   "devDependencies": {
-    "@guard-sdk/pricing": "workspace:*",
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "bumpp": "^11.1.0",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.20"
-  },
-  "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.61.0 <1"
   }
 }

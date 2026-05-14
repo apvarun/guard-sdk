@@ -1,0 +1,14 @@
+{
+  "name": "@guard-sdk/example-basic-otel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node ./index.mjs",
+    "build": "node --check ./index.mjs",
+    "test": "node --check ./index.mjs"
+  },
+  "dependencies": {
+    "@guard-sdk/core": "workspace:*",
+    "@guard-sdk/otel": "workspace:*"
+  }
+}
