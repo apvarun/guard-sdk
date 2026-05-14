@@ -1,11 +1,14 @@
 import type { PricingResolver } from "@guard-sdk/pricing";
 export type GuardStatus = "success" | "failed" | "blocked" | "timeout";
+export type GuardMode = "enforce" | "dry-run";
+export type GuardPolicyReason = "CALL_LIMIT_EXCEEDED" | "TOKEN_LIMIT_EXCEEDED" | "BUDGET_EXCEEDED";
 export type GuardLogger = {
   log: (usage: GuardUsage) => Promise<void> | void;
 };
 export type GuardConfig = {
   name?: string;
   userId?: string;
+  mode?: GuardMode;
   maxCostUsd?: number;
   maxTokens?: number;
   maxCalls?: number;
@@ -14,6 +17,7 @@ export type GuardConfig = {
   provider?: string;
   model?: string;
   pricing?: PricingResolver;
+  tokenizer?: (value: unknown) => number | Promise<number>;
   logger?: GuardLogger;
 };
 export type GuardUsage = {
@@ -31,6 +35,8 @@ export type GuardUsage = {
   durationMs: number;
   status: GuardStatus;
   blockedReason?: string;
+  wouldBlock?: boolean;
+  wouldBlockReasons?: GuardPolicyReason[];
 };
 export type GuardResult<T> = {
   data: T;

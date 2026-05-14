@@ -46,6 +46,87 @@ console.log(usage);
 
 `createJsonFileLogger` writes newline-delimited JSON (NDJSON), one usage record per line.
 
+## Dry-run mode
+
+Use `mode: "dry-run"` to simulate policy blocking without throwing budget/token/call-limit errors.
+
+```ts
+import { guard } from "@guard-sdk/core";
+
+const result = await guard.run(async () => callLLM(), {
+  mode: "dry-run",
+  maxTokens: 5000,
+  maxCostUsd: 1,
+});
+
+console.log(result.usage.status); // "success" when call succeeds
+console.log(result.usage.wouldBlock); // true when any policy would block
+console.log(result.usage.wouldBlockReasons); // e.g. ["TOKEN_LIMIT_EXCEEDED"]
+```
+
+Dry-run does not suppress timeout or runtime failures. Those still reject with the original error path.
+
+## Token and cost semantics
+
+- If provider usage exists (for example `usage.prompt_tokens`), guard uses provider-reported values.
+- If provider usage is absent, guard estimates tokens.
+- Cost is always estimated from pricing data and token counts.
+- `estimatedCostUsd` can be `undefined` when provider/model pricing is unavailable.
+
+### Custom tokenizer
+
+When provider usage is missing, you can provide a tokenizer:
+
+```ts
+import { guard } from "@guard-sdk/core";
+
+await guard.run(async () => ({ output: "hello world" }), {
+  tokenizer: async (value) => {
+    const text = JSON.stringify(value) ?? "";
+    return Math.ceil(text.length / 3);
+  },
+});
+```
+
+If the tokenizer throws or returns an invalid value, guard falls back to the built-in heuristic.
+
+## Pricing override patterns
+
+```ts
+import { createPricingResolver, createPricingResolverWithDefaults } from "@guard-sdk/pricing";
+```
+
+Full custom pricing table (no bundled fallback):
+
+```ts
+const pricing = createPricingResolver([
+  {
+    provider: "openai",
+    model: "gpt-4.1-mini",
+    inputPerMillionTokens: 0.4,
+    outputPerMillionTokens: 1.6,
+  },
+]);
+```
+
+Override selected models while keeping bundled defaults for the rest:
+
+```ts
+const pricing = createPricingResolverWithDefaults([
+  {
+    provider: "openai",
+    model: "gpt-4.1-mini",
+    inputPerMillionTokens: 0.35,
+    outputPerMillionTokens: 1.4,
+  },
+]);
+```
+
+Troubleshooting:
+
+- `estimatedCostUsd` is missing: ensure `provider`, `model`, and matching pricing entry are set.
+- Cost looks inaccurate: provider usage and tokenizer-based values are estimates; override pricing to match your billing source of truth.
+
 ## SQLite Logger + CLI Report (v0.2)
 
 ```ts

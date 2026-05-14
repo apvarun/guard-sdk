@@ -34,12 +34,18 @@ function key(provider: string, model: string) {
   return `${provider.trim().toLowerCase()}::${model.trim().toLowerCase()}`;
 }
 
-export function createPricingResolver(entries: ModelPricing[]): PricingResolver {
+function createPricingIndex(entries: ModelPricing[]) {
   const index = new Map<string, ModelPricing>();
 
   for (const entry of entries) {
     index.set(key(entry.provider, entry.model), entry);
   }
+
+  return index;
+}
+
+export function createPricingResolver(entries: ModelPricing[]): PricingResolver {
+  const index = createPricingIndex(entries);
 
   return {
     getPricing(provider: string, model: string) {
@@ -49,6 +55,18 @@ export function createPricingResolver(entries: ModelPricing[]): PricingResolver 
 }
 
 const defaultResolver = createPricingResolver(DEFAULT_PRICING);
+
+export function createPricingResolverWithDefaults(overrides: ModelPricing[]): PricingResolver {
+  const overrideResolver = createPricingResolver(overrides);
+
+  return {
+    getPricing(provider: string, model: string) {
+      return (
+        overrideResolver.getPricing(provider, model) ?? defaultResolver.getPricing(provider, model)
+      );
+    },
+  };
+}
 
 export function getModelPricing(provider: string, model: string): ModelPricing | undefined {
   return defaultResolver.getPricing(provider, model);

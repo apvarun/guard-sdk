@@ -119,6 +119,133 @@ test("budget limit is enforced", async () => {
   ).rejects.toBeInstanceOf(BudgetExceededError);
 });
 
+test("custom tokenizer is used when provider usage is missing", async () => {
+  const { usage } = await guard.run(async () => ({ message: "hello" }), {
+    tokenizer: async () => 42,
+  });
+
+  expect(usage.totalTokens).toBe(42);
+});
+
+test("provider usage takes precedence over custom tokenizer", async () => {
+  const { usage } = await guard.run(
+    async () => ({
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    }),
+    {
+      tokenizer: () => 9999,
+    },
+  );
+
+  expect(usage.inputTokens).toBe(10);
+  expect(usage.outputTokens).toBe(5);
+  expect(usage.totalTokens).toBe(15);
+});
+
+test("tokenizer fallback uses heuristic when tokenizer returns invalid values", async () => {
+  const data = { payload: "abcdef" };
+  const expectedTotalTokens = Math.ceil((JSON.stringify(data) ?? "").length / 4);
+
+  const invalidValue = await guard.run(async () => data, {
+    tokenizer: () => Number.NaN,
+  });
+  expect(invalidValue.usage.totalTokens).toBe(expectedTotalTokens);
+
+  const negativeValue = await guard.run(async () => data, {
+    tokenizer: () => -1,
+  });
+  expect(negativeValue.usage.totalTokens).toBe(expectedTotalTokens);
+
+  const throwingTokenizer = await guard.run(async () => data, {
+    tokenizer: () => {
+      throw new Error("tokenizer failed");
+    },
+  });
+  expect(throwingTokenizer.usage.totalTokens).toBe(expectedTotalTokens);
+});
+
+test("dry-run mode reports pre-call violations without blocking", async () => {
+  const run = guard.createRun({
+    mode: "dry-run",
+    maxCalls: 0,
+  });
+
+  await expect(run.call("first", async () => "ok")).resolves.toBe("ok");
+
+  const summary = run.summary();
+  expect(summary.status).toBe("success");
+  expect(summary.wouldBlock).toBe(true);
+  expect(summary.wouldBlockReasons).toContain("CALL_LIMIT_EXCEEDED");
+});
+
+test("dry-run mode reports post-call token and budget violations without blocking", async () => {
+  const pricing = createPricingResolver([
+    {
+      provider: "openai",
+      model: "gpt-test",
+      inputPerMillionTokens: 1,
+      outputPerMillionTokens: 1,
+    },
+  ]);
+
+  const { data, usage } = await guard.run(
+    async () => ({
+      ok: true,
+      usage: { prompt_tokens: 1_000_000, completion_tokens: 0, total_tokens: 1_000_000 },
+    }),
+    {
+      mode: "dry-run",
+      provider: "openai",
+      model: "gpt-test",
+      maxTokens: 10,
+      maxCostUsd: 0.5,
+      pricing,
+    },
+  );
+
+  expect(data.ok).toBe(true);
+  expect(usage.status).toBe("success");
+  expect(usage.wouldBlock).toBe(true);
+  expect(usage.wouldBlockReasons).toEqual(
+    expect.arrayContaining(["TOKEN_LIMIT_EXCEEDED", "BUDGET_EXCEEDED"]),
+  );
+});
+
+test("dry-run mode still enforces timeout failures", async () => {
+  await expect(
+    guard.run(
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return "late";
+      },
+      {
+        mode: "dry-run",
+        timeoutMs: 5,
+      },
+    ),
+  ).rejects.toBeInstanceOf(TimeoutError);
+});
+
+test("dry-run metadata is included in logger output", async () => {
+  const logger = createMemoryLogger();
+
+  const run = guard.createRun({
+    mode: "dry-run",
+    maxCalls: 0,
+    logger,
+  });
+
+  await run.call("dry", async () => "ok");
+  run.summary();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  const logs = logger.getLogs();
+  expect(logs).toHaveLength(1);
+  expect(logs[0]?.status).toBe("success");
+  expect(logs[0]?.wouldBlock).toBe(true);
+  expect(logs[0]?.wouldBlockReasons).toContain("CALL_LIMIT_EXCEEDED");
+});
+
 test("logger is called once with final usage", async () => {
   const logger = createMemoryLogger();
 

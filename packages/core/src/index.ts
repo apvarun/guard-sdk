@@ -2,6 +2,8 @@ export { guard } from "./guard.js";
 export type {
   GuardConfig,
   GuardLogger,
+  GuardMode,
+  GuardPolicyReason,
   GuardResult,
   GuardRun,
   GuardStatus,

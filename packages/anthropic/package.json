@@ -1,6 +1,6 @@
 {
   "name": "@guard-sdk/anthropic",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Anthropic adapter for guard-sdk.",
   "license": "MIT",
   "files": [

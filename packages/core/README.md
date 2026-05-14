@@ -9,6 +9,13 @@ Core runtime protection for AI and agent calls.
 - `createConsoleLogger()`
 - `createMemoryLogger()`
 - `createJsonFileLogger(options)`
+- `config.mode?: "enforce" | "dry-run"`: dry-run records what would block without enforcing budget/token/call-limit throws.
+- `config.tokenizer?: (value: unknown) => number | Promise<number>`: custom fallback token estimation when provider usage is unavailable.
+
+Dry-run metadata is returned in usage/log output:
+
+- `wouldBlock?: boolean`
+- `wouldBlockReasons?: Array<"CALL_LIMIT_EXCEEDED" | "TOKEN_LIMIT_EXCEEDED" | "BUDGET_EXCEEDED">`
 
 ## File Logger
 

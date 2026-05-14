@@ -6,13 +6,17 @@ import {
   TimeoutError,
   TokenLimitExceededError,
 } from "./errors.js";
-import type { GuardConfig, GuardResult, GuardRun, GuardUsage } from "./types.js";
+import type { GuardConfig, GuardPolicyReason, GuardResult, GuardRun, GuardUsage } from "./types.js";
 
 type TokenUsage = {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
 };
+
+function isDryRunMode(config: GuardConfig) {
+  return config.mode === "dry-run";
+}
 
 function createRunId() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -79,7 +83,7 @@ function extractProviderUsage(value: unknown): TokenUsage | undefined {
   };
 }
 
-function estimateTokensFromValue(value: unknown): TokenUsage {
+function estimateTokensFromHeuristic(value: unknown): TokenUsage {
   let serialized = "";
 
   try {
@@ -93,6 +97,35 @@ function estimateTokensFromValue(value: unknown): TokenUsage {
   return {
     totalTokens,
   };
+}
+
+function normalizeTokenizerResult(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+
+  return value;
+}
+
+async function estimateTokensFromValue(
+  value: unknown,
+  tokenizer: GuardConfig["tokenizer"],
+): Promise<TokenUsage> {
+  if (typeof tokenizer !== "function") {
+    return estimateTokensFromHeuristic(value);
+  }
+
+  try {
+    const tokenCount = normalizeTokenizerResult(await tokenizer(value));
+
+    if (tokenCount !== undefined) {
+      return { totalTokens: tokenCount };
+    }
+  } catch {
+    // fall back to heuristic estimate when tokenizer errors.
+  }
+
+  return estimateTokensFromHeuristic(value);
 }
 
 function mergeTokenUsage(current: GuardUsage, next: TokenUsage) {
@@ -142,23 +175,29 @@ function attachUsage<T extends GuardError>(error: T, usage: GuardUsage): T {
   return error;
 }
 
-function checkPreCallLimits(config: GuardConfig, usage: GuardUsage) {
+function getPreCallLimitViolations(config: GuardConfig, usage: GuardUsage): GuardPolicyReason[] {
+  const violations: GuardPolicyReason[] = [];
+
   if (config.maxCalls !== undefined && usage.calls >= config.maxCalls) {
-    throw new CallLimitExceededError("Maximum call limit reached", usage);
+    violations.push("CALL_LIMIT_EXCEEDED");
   }
 
   if (config.maxTokens !== undefined && (usage.totalTokens ?? 0) >= config.maxTokens) {
-    throw new TokenLimitExceededError("Maximum token limit reached", usage);
+    violations.push("TOKEN_LIMIT_EXCEEDED");
   }
 
   if (config.maxCostUsd !== undefined && (usage.estimatedCostUsd ?? 0) >= config.maxCostUsd) {
-    throw new BudgetExceededError("Maximum cost budget reached", usage);
+    violations.push("BUDGET_EXCEEDED");
   }
+
+  return violations;
 }
 
-function checkPostCallLimits(config: GuardConfig, usage: GuardUsage) {
+function getPostCallLimitViolations(config: GuardConfig, usage: GuardUsage): GuardPolicyReason[] {
+  const violations: GuardPolicyReason[] = [];
+
   if (config.maxTokens !== undefined && (usage.totalTokens ?? 0) > config.maxTokens) {
-    throw new TokenLimitExceededError("Token limit exceeded", usage);
+    violations.push("TOKEN_LIMIT_EXCEEDED");
   }
 
   if (
@@ -166,7 +205,37 @@ function checkPostCallLimits(config: GuardConfig, usage: GuardUsage) {
     usage.estimatedCostUsd !== undefined &&
     usage.estimatedCostUsd > config.maxCostUsd
   ) {
-    throw new BudgetExceededError("Cost budget exceeded", usage);
+    violations.push("BUDGET_EXCEEDED");
+  }
+
+  return violations;
+}
+
+function checkPreCallLimits(config: GuardConfig, usage: GuardUsage) {
+  for (const violation of getPreCallLimitViolations(config, usage)) {
+    if (violation === "CALL_LIMIT_EXCEEDED") {
+      throw new CallLimitExceededError("Maximum call limit reached", usage);
+    }
+
+    if (violation === "TOKEN_LIMIT_EXCEEDED") {
+      throw new TokenLimitExceededError("Maximum token limit reached", usage);
+    }
+
+    if (violation === "BUDGET_EXCEEDED") {
+      throw new BudgetExceededError("Maximum cost budget reached", usage);
+    }
+  }
+}
+
+function checkPostCallLimits(config: GuardConfig, usage: GuardUsage) {
+  for (const violation of getPostCallLimitViolations(config, usage)) {
+    if (violation === "TOKEN_LIMIT_EXCEEDED") {
+      throw new TokenLimitExceededError("Token limit exceeded", usage);
+    }
+
+    if (violation === "BUDGET_EXCEEDED") {
+      throw new BudgetExceededError("Cost budget exceeded", usage);
+    }
   }
 }
 
@@ -223,6 +292,21 @@ class GuardRunController {
     this.usage.blockedReason = blockedReason;
   }
 
+  private recordWouldBlockReasons(reasons: GuardPolicyReason[]) {
+    if (reasons.length === 0) {
+      return;
+    }
+
+    const current = new Set(this.usage.wouldBlockReasons ?? []);
+
+    for (const reason of reasons) {
+      current.add(reason);
+    }
+
+    this.usage.wouldBlock = true;
+    this.usage.wouldBlockReasons = [...current];
+  }
+
   private async logOnce() {
     if (this.loggerEmitted || !this.config.logger) {
       return;
@@ -233,20 +317,24 @@ class GuardRunController {
   }
 
   async call<T>(_name: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      checkPreCallLimits(this.config, this.snapshotUsage());
-    } catch (error) {
-      if (
-        error instanceof BudgetExceededError ||
-        error instanceof TokenLimitExceededError ||
-        error instanceof CallLimitExceededError
-      ) {
-        this.setStatus("blocked", error.code);
-        await this.logOnce();
-        throw attachUsage(error, this.snapshotUsage());
-      }
+    if (isDryRunMode(this.config)) {
+      this.recordWouldBlockReasons(getPreCallLimitViolations(this.config, this.snapshotUsage()));
+    } else {
+      try {
+        checkPreCallLimits(this.config, this.snapshotUsage());
+      } catch (error) {
+        if (
+          error instanceof BudgetExceededError ||
+          error instanceof TokenLimitExceededError ||
+          error instanceof CallLimitExceededError
+        ) {
+          this.setStatus("blocked", error.code);
+          await this.logOnce();
+          throw attachUsage(error, this.snapshotUsage());
+        }
 
-      throw error;
+        throw error;
+      }
     }
 
     this.usage.calls += 1;
@@ -256,7 +344,9 @@ class GuardRunController {
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
         const data = await executeWithTimeout(fn, this.config.timeoutMs);
-        const tokenUsage = extractProviderUsage(data) ?? estimateTokensFromValue(data);
+        const tokenUsage =
+          extractProviderUsage(data) ??
+          (await estimateTokensFromValue(data, this.config.tokenizer));
         mergeTokenUsage(this.usage, tokenUsage);
 
         const estimatedCostUsd = estimateCostUsd(this.config, this.usage);
@@ -265,7 +355,14 @@ class GuardRunController {
           this.usage.estimatedCostUsd = estimatedCostUsd;
         }
 
-        checkPostCallLimits(this.config, this.snapshotUsage());
+        const usageSnapshot = this.snapshotUsage();
+
+        if (isDryRunMode(this.config)) {
+          this.recordWouldBlockReasons(getPostCallLimitViolations(this.config, usageSnapshot));
+        } else {
+          checkPostCallLimits(this.config, usageSnapshot);
+        }
+
         this.setStatus("success");
 
         return data;
