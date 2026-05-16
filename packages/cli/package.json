@@ -2,7 +2,24 @@
   "name": "@guard-sdk/cli",
   "version": "0.5.0",
   "description": "CLI tools for guard-sdk.",
+  "keywords": [
+    "ai",
+    "cli",
+    "cost-control",
+    "guard-sdk",
+    "llm",
+    "reporting",
+    "usage"
+  ],
+  "homepage": "https://github.com/apvarun/guard-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/apvarun/guard-sdk/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apvarun/guard-sdk.git"
+  },
   "bin": {
     "guard": "./dist/index.mjs"
   },
@@ -10,7 +27,7 @@
     "dist"
   ],
   "type": "module",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"

@@ -176,13 +176,18 @@ function wrapAsyncIterable<T>(
 
       return {
         next: async (...args: [] | [unknown]) => {
-          const result = await iterator.next(...(args as []));
+          try {
+            const result = await iterator.next(...(args as []));
 
-          if (result.done) {
+            if (result.done) {
+              await finalize();
+            }
+
+            return result;
+          } catch (error) {
             await finalize();
+            throw error;
           }
-
-          return result;
         },
         return: async (value?: unknown) => {
           if (typeof iterator.return === "function") {

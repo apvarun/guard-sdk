@@ -295,6 +295,56 @@ test("streamText finalizes on async-iterator completion", async () => {
   expect(logs[0]?.totalTokens).toBe(10);
 });
 
+test("streamText finalizes when async-iterator next throws", async () => {
+  const logger = createMemoryLogger();
+  const providerError = new Error("stream blew up");
+
+  const guarded = createVercelAIGuard(
+    {
+      generateText: async () => ({
+        text: "ok",
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+      }),
+      streamText: () => ({
+        textStream: {
+          [Symbol.asyncIterator]() {
+            let count = 0;
+            return {
+              next: async () => {
+                if (count === 0) {
+                  count += 1;
+                  return { done: false, value: "a" };
+                }
+
+                throw providerError;
+              },
+            };
+          },
+        },
+        totalUsage: Promise.resolve({ promptTokens: 9, completionTokens: 3, totalTokens: 12 }),
+      }),
+    },
+    {
+      logger,
+      name: "vercel-iterator-throw",
+    },
+  );
+
+  const stream = guarded.streamText({ model: "gpt-4o-mini", prompt: "hi" });
+
+  await expect(
+    (async () => {
+      for await (const _ of stream.textStream as AsyncIterable<string>) {
+        // iterate until failure
+      }
+    })(),
+  ).rejects.toBe(providerError);
+
+  const logs = logger.getLogs();
+  expect(logs).toHaveLength(1);
+  expect(logs[0]?.totalTokens).toBe(12);
+});
+
 test("streamText enforces budget from totalUsage", async () => {
   const pricing = createPricingResolver([
     {

@@ -13,7 +13,7 @@ SQLite persistence and report queries for guard-sdk usage logs.
 import { guard } from "@guard-sdk/core";
 import { createSQLiteLogger } from "@guard-sdk/storage-sqlite";
 
-const logger = createSQLiteLogger({
+const logger = await createSQLiteLogger({
   dbPath: "./.guard/usage.db",
 });
 

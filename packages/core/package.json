@@ -2,12 +2,29 @@
   "name": "@guard-sdk/core",
   "version": "0.5.0",
   "description": "Cost limits, timeouts, and circuit breakers for AI agents.",
+  "keywords": [
+    "agents",
+    "ai",
+    "circuit-breaker",
+    "cost-control",
+    "guard-sdk",
+    "llm",
+    "timeouts"
+  ],
+  "homepage": "https://github.com/apvarun/guard-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/apvarun/guard-sdk/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apvarun/guard-sdk.git"
+  },
   "files": [
     "dist"
   ],
   "type": "module",
-  "types": "./src/index.ts",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": "./dist/index.mjs",
     "./package.json": "./package.json"
