@@ -1,6 +1,16 @@
 # guard-sdk
 
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/apvarun/guard-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/apvarun/guard-sdk/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-guard--sdk.js.org-blue)](https://guard-sdk.js.org)
+[![npm](https://img.shields.io/npm/v/@guard-sdk/core)](https://www.npmjs.com/package/@guard-sdk/core)
+
 Cost limits, timeouts, and circuit breakers for AI agents.
+
+- **Docs**: [guard-sdk.js.org](https://guard-sdk.js.org)
+- **License**: MIT
+- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
+- **Minimum Node.js**: `>=22.12.0`
 
 ## Packages
 
@@ -12,6 +22,16 @@ Cost limits, timeouts, and circuit breakers for AI agents.
 - `@guard-sdk/storage-sqlite`: SQLite logger + report query helpers
 - `@guard-sdk/otel`: OpenTelemetry logger integration (spans + logs)
 - `@guard-sdk/cli`: CLI reporting (`guard report`)
+
+### Peer dependencies
+
+These adapter packages require the corresponding peer dependency installed in your project:
+
+| Package                | Peer dependency     | Version       |
+| ---------------------- | ------------------- | ------------- |
+| `@guard-sdk/openai`    | `openai`            | `>=6.0.0`     |
+| `@guard-sdk/anthropic` | `@anthropic-ai/sdk` | `>=0.61.0 <1` |
+| `@guard-sdk/vercel-ai` | `ai`                | `>=5.0.0`     |
 
 ## Install
 
@@ -46,6 +66,51 @@ console.log(usage);
 ```
 
 `createJsonFileLogger` writes newline-delimited JSON (NDJSON), one usage record per line.
+
+### Other loggers
+
+**Console logger** — writes usage summaries to stdout:
+
+```ts
+import { createConsoleLogger } from "@guard-sdk/core";
+
+const logger = createConsoleLogger();
+```
+
+**Memory logger** — retains usage records in memory for inspection (useful in tests):
+
+```ts
+import { createMemoryLogger } from "@guard-sdk/core";
+
+const logger = createMemoryLogger();
+
+// after guard.run(..., { logger })
+console.log(logger.records);
+```
+
+### Error classes
+
+When a guard policy is violated, `guard.run` rejects with a typed error:
+
+| Error                     | Thrown when                             |
+| ------------------------- | --------------------------------------- |
+| `BudgetExceededError`     | `estimatedCostUsd` exceeds `maxCostUsd` |
+| `TokenLimitExceededError` | total tokens exceed `maxTokens`         |
+| `CallLimitExceededError`  | call count exceeds `maxCalls`           |
+| `TimeoutError`            | wall-clock time exceeds `timeoutMs`     |
+
+All error classes extend `GuardError`.
+
+```ts
+import {
+  guard,
+  BudgetExceededError,
+  TokenLimitExceededError,
+  CallLimitExceededError,
+  TimeoutError,
+  GuardError,
+} from "@guard-sdk/core";
+```
 
 ## Dry-run mode
 
@@ -152,6 +217,18 @@ guard report --db ./.guard/usage.db --from 2026-05-01T00:00:00.000Z --to 2026-05
 ```
 
 `--json` outputs the same report summary as a single JSON object for automation/pipelines.
+
+**Programmatic usage** — read reports without the CLI:
+
+```ts
+import { readUsageReport } from "@guard-sdk/storage-sqlite";
+
+const report = await readUsageReport({
+  dbPath: "./.guard/usage.db",
+  filters: { status: "blocked" },
+});
+console.log(report);
+```
 
 ## OpenTelemetry Logger (v0.5)
 
@@ -315,3 +392,13 @@ vp check
 vp test
 vp run -r build
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, validation steps, and pull request guidelines.
+
+This project is governed by a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold its terms.
+
+### Reporting vulnerabilities
+
+Please report security issues privately via [GitHub Security Advisories](https://github.com/apvarun/guard-sdk/security/advisories/new). See [SECURITY.md](SECURITY.md) for details.

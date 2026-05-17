@@ -2,11 +2,28 @@
   "name": "guard-sdk",
   "version": "0.5.0",
   "private": true,
+  "keywords": [
+    "agents",
+    "ai",
+    "circuit-breaker",
+    "cost-control",
+    "llm",
+    "timeouts"
+  ],
+  "homepage": "https://guard-sdk.js.org",
+  "bugs": {
+    "url": "https://github.com/apvarun/guard-sdk/issues"
+  },
+  "license": "MIT",
+  "author": "apvarun",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/apvarun/guard-sdk.git"
+  },
   "workspaces": [
     "packages/*",
-    "apps/*",
     "examples/*",
-    "tools/*"
+    "apps/*"
   ],
   "type": "module",
   "scripts": {
