@@ -353,6 +353,80 @@ code {
   gap: 0.5rem;
 }
 
+/* --- rendered README content --- */
+
+.readme-content {
+  overflow-x: auto;
+}
+
+.readme-content h1 {
+  font-size: 1.5rem;
+  margin: 1.5rem 0 0.75rem;
+}
+
+.readme-content h1:first-child {
+  margin-top: 0;
+}
+
+.readme-content h2 {
+  font-size: 1.2rem;
+  margin: 1.5rem 0 0.75rem;
+}
+
+.readme-content h3 {
+  font-size: 1.05rem;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.readme-content p {
+  margin: 0 0 1rem;
+}
+
+.readme-content pre {
+  margin: 0 0 1rem;
+  background: #f4f4f5;
+  padding: 1rem 1.15rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  border: none;
+  border-radius: 0;
+}
+
+.readme-content pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.readme-content table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin: 0 0 1rem;
+}
+
+.readme-content th,
+.readme-content td {
+  border-bottom: 1px solid var(--color-rule);
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  vertical-align: top;
+}
+
+.readme-content th {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.readme-content hr {
+  border: none;
+  border-top: 1px solid var(--color-rule);
+  margin: 1.5rem 0;
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 3rem 1rem 3rem;

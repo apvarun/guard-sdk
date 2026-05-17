@@ -83,6 +83,13 @@ const dependencyLinks = pkg.internalDependencies.map((dependency) => ({
       ) : null}
     </section>
 
+    {pkg.readmeHtml ? (
+      <section class="section readme-content">
+        <h2>Documentation</h2>
+        <div set:html={pkg.readmeHtml} />
+      </section>
+    ) : null}
+
     <section class="section">
       <h2>Exported API</h2>
       <p>

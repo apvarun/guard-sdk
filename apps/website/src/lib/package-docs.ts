@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { marked } from "marked";
 
 export type ApiSymbolKind =
   | "function"
@@ -24,6 +25,7 @@ export type PackageDoc = {
   version: string;
   description: string;
   readmeSummary: string;
+  readmeHtml: string;
   internalDependencies: string[];
   peerDependencies: string[];
   exportStatements: string[];
@@ -287,12 +289,23 @@ async function readPackageDoc(dirName: string): Promise<PackageDoc> {
   );
   const peerDependencies = Object.keys(packageJson.peerDependencies ?? {});
 
+  let readmeHtml = "";
+
+  if (readme) {
+    try {
+      readmeHtml = await marked.parse(readme);
+    } catch {
+      readmeHtml = "";
+    }
+  }
+
   return {
     slug: normalizeSlug(packageJson.name),
     name: packageJson.name,
     version: packageJson.version ?? "0.0.0",
     description: packageJson.description ?? "No package description available.",
     readmeSummary: firstParagraph(readme),
+    readmeHtml,
     internalDependencies: dependencies.sort(),
     peerDependencies: peerDependencies.sort(),
     exportStatements,
