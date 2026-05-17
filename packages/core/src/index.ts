@@ -20,3 +20,5 @@ export {
 
 export { createConsoleLogger, createJsonFileLogger, createMemoryLogger } from "./loggers.js";
 export type { JsonFileLoggerOptions, MemoryLogger } from "./loggers.js";
+
+export { createTempDir, createTempDbPath } from "./test-utils.js";

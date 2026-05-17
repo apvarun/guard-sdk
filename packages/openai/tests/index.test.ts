@@ -1,14 +1,15 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { expect, test } from "vite-plus/test";
 import {
   BudgetExceededError,
   CallLimitExceededError,
   TimeoutError,
   createMemoryLogger,
+  createJsonFileLogger,
+  createTempDir,
+  createTempDbPath,
 } from "@guard-sdk/core";
-import { createJsonFileLogger } from "../../core/src/index.ts";
 import { createSQLiteLogger, readUsageReport } from "../../storage-sqlite/src/index.ts";
 import { createPricingResolver } from "@guard-sdk/pricing";
 import { createOpenAIGuard } from "../src/index.ts";
@@ -180,7 +181,7 @@ test("timeout errors are not retried", async () => {
 });
 
 test("supports json file logger in adapter config", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-openai-"));
+  const [directory, cleanup] = await createTempDir("guard-sdk-openai-");
   const filePath = join(directory, "usage.jsonl");
 
   try {
@@ -216,13 +217,12 @@ test("supports json file logger in adapter config", async () => {
     expect(log.model).toBe("gpt-4.1-mini");
     expect(log.status).toBe("success");
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await cleanup();
   }
 });
 
 test("supports sqlite logger in adapter config", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-openai-"));
-  const dbPath = join(directory, "usage.db");
+  const [dbPath, cleanup] = await createTempDbPath("guard-sdk-openai-");
 
   try {
     const client = {
@@ -248,6 +248,6 @@ test("supports sqlite logger in adapter config", async () => {
     expect(report.totalCalls).toBe(1);
     expect(report.mostExpensiveRun?.name).toBe("openai-sqlite-log");
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await cleanup();
   }
 });

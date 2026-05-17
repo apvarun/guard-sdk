@@ -1,12 +1,10 @@
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
 import { expect, test } from "vite-plus/test";
 import {
   BudgetExceededError,
   CallLimitExceededError,
   TimeoutError,
   createMemoryLogger,
+  createTempDbPath,
 } from "@guard-sdk/core";
 import { createPricingResolver } from "@guard-sdk/pricing";
 import { createSQLiteLogger, readUsageReport } from "../../storage-sqlite/src/index.ts";
@@ -404,8 +402,7 @@ test("provider errors remain unwrapped", async () => {
 });
 
 test("supports sqlite logger in adapter config", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-vercel-ai-"));
-  const dbPath = join(directory, "usage.db");
+  const [dbPath, cleanup] = await createTempDbPath("guard-sdk-vercel-ai-");
 
   try {
     const logger = await createSQLiteLogger({ dbPath });
@@ -443,6 +440,6 @@ test("supports sqlite logger in adapter config", async () => {
     expect(report.totalCalls).toBe(1);
     expect(report.mostExpensiveRun?.name).toBe("vercel-sqlite-log");
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    await cleanup();
   }
 });
