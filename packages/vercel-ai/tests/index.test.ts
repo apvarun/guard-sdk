@@ -401,6 +401,40 @@ test("provider errors remain unwrapped", async () => {
   await expect(stream.text).rejects.toBe(providerError);
 });
 
+test("stream wrapper preserves symbol-keyed properties", async () => {
+  const marker = Symbol("marker");
+
+  const guarded = createVercelAIGuard({
+    generateText: async () => ({
+      text: "ok",
+      usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+    }),
+    streamText: () => {
+      const stream = {
+        totalUsage: Promise.resolve({ promptTokens: 10, completionTokens: 5, totalTokens: 15 }),
+        text: Promise.resolve("ok"),
+      } as {
+        text: Promise<string>;
+        totalUsage: Promise<{
+          promptTokens: number;
+          completionTokens: number;
+          totalTokens: number;
+        }>;
+        [key: symbol]: string;
+      };
+
+      stream[marker] = "symbol-value";
+      return stream;
+    },
+  });
+
+  const stream = guarded.streamText({ model: "gpt-4o-mini", prompt: "hi" }) as {
+    [key: symbol]: string;
+  };
+
+  expect(stream[marker]).toBe("symbol-value");
+});
+
 test("supports sqlite logger in adapter config", async () => {
   const [dbPath, cleanup] = await createTempDbPath("guard-sdk-vercel-ai-");
 

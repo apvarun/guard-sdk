@@ -45,7 +45,7 @@ function withDuration(usage: GuardUsage, startedAt: number): GuardUsage {
   };
 }
 
-function extractProviderUsage(value: unknown): TokenUsage | undefined {
+function extractUsageObject(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
@@ -56,29 +56,53 @@ function extractProviderUsage(value: unknown): TokenUsage | undefined {
     return undefined;
   }
 
-  const promptTokens =
-    toNumber((usage as Record<string, unknown>).prompt_tokens) ??
-    toNumber((usage as Record<string, unknown>).input_tokens);
+  return usage as Record<string, unknown>;
+}
 
-  const completionTokens =
-    toNumber((usage as Record<string, unknown>).completion_tokens) ??
-    toNumber((usage as Record<string, unknown>).output_tokens);
+function extractTokenWithFallback(
+  usage: Record<string, unknown>,
+  primary: string,
+  fallback: string,
+): number | undefined {
+  return toNumber(usage[primary]) ?? toNumber(usage[fallback]);
+}
 
-  const explicitTotal = toNumber((usage as Record<string, unknown>).total_tokens);
+function calculateTotalTokens(
+  explicitTotal: number | undefined,
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+): number | undefined {
+  if (explicitTotal !== undefined) {
+    return explicitTotal;
+  }
 
-  const totalTokens =
-    explicitTotal ??
-    (promptTokens !== undefined || completionTokens !== undefined
-      ? (promptTokens ?? 0) + (completionTokens ?? 0)
-      : undefined);
+  if (inputTokens !== undefined || outputTokens !== undefined) {
+    return (inputTokens ?? 0) + (outputTokens ?? 0);
+  }
 
-  if (promptTokens === undefined && completionTokens === undefined && totalTokens === undefined) {
+  return undefined;
+}
+
+function extractProviderUsage(value: unknown): TokenUsage | undefined {
+  const usage = extractUsageObject(value);
+
+  if (!usage) {
+    return undefined;
+  }
+
+  const inputTokens = extractTokenWithFallback(usage, "prompt_tokens", "input_tokens");
+  const outputTokens = extractTokenWithFallback(usage, "completion_tokens", "output_tokens");
+  const explicitTotal = toNumber(usage.total_tokens);
+
+  const totalTokens = calculateTotalTokens(explicitTotal, inputTokens, outputTokens);
+
+  if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) {
     return undefined;
   }
 
   return {
-    inputTokens: promptTokens,
-    outputTokens: completionTokens,
+    inputTokens,
+    outputTokens,
     totalTokens,
   };
 }
@@ -128,23 +152,29 @@ async function estimateTokensFromValue(
   return estimateTokensFromHeuristic(value);
 }
 
+function accumulateToken(current: number | undefined, next: number): number {
+  return (current ?? 0) + next;
+}
+
 function mergeTokenUsage(current: GuardUsage, next: TokenUsage) {
   if (next.inputTokens !== undefined) {
-    current.inputTokens = (current.inputTokens ?? 0) + next.inputTokens;
+    current.inputTokens = accumulateToken(current.inputTokens, next.inputTokens);
   }
 
   if (next.outputTokens !== undefined) {
-    current.outputTokens = (current.outputTokens ?? 0) + next.outputTokens;
+    current.outputTokens = accumulateToken(current.outputTokens, next.outputTokens);
   }
 
   if (next.totalTokens !== undefined) {
-    current.totalTokens = (current.totalTokens ?? 0) + next.totalTokens;
+    current.totalTokens = accumulateToken(current.totalTokens, next.totalTokens);
     return;
   }
 
   if (next.inputTokens !== undefined || next.outputTokens !== undefined) {
-    current.totalTokens =
-      (current.totalTokens ?? 0) + (next.inputTokens ?? 0) + (next.outputTokens ?? 0);
+    current.totalTokens = accumulateToken(
+      current.totalTokens,
+      (next.inputTokens ?? 0) + (next.outputTokens ?? 0),
+    );
   }
 }
 
@@ -316,26 +346,117 @@ class GuardRunController {
     await this.config.logger.log(this.snapshotUsage());
   }
 
-  async call<T>(_name: string, fn: () => Promise<T>): Promise<T> {
-    if (isDryRunMode(this.config)) {
-      this.recordWouldBlockReasons(getPreCallLimitViolations(this.config, this.snapshotUsage()));
-    } else {
-      try {
-        checkPreCallLimits(this.config, this.snapshotUsage());
-      } catch (error) {
-        if (
-          error instanceof BudgetExceededError ||
-          error instanceof TokenLimitExceededError ||
-          error instanceof CallLimitExceededError
-        ) {
-          this.setStatus("blocked", error.code);
-          await this.logOnce();
-          throw attachUsage(error, this.snapshotUsage());
-        }
+  private async handlePreCallLimits() {
+    const usageSnapshot = this.snapshotUsage();
 
-        throw error;
-      }
+    if (isDryRunMode(this.config)) {
+      this.recordWouldBlockReasons(getPreCallLimitViolations(this.config, usageSnapshot));
+      return;
     }
+
+    try {
+      checkPreCallLimits(this.config, usageSnapshot);
+    } catch (error) {
+      if (
+        error instanceof BudgetExceededError ||
+        error instanceof TokenLimitExceededError ||
+        error instanceof CallLimitExceededError
+      ) {
+        this.setStatus("blocked", error.code);
+        await this.logOnce();
+        throw attachUsage(error, this.snapshotUsage());
+      }
+
+      throw error;
+    }
+  }
+
+  private async executeSingleAttempt<T>(fn: () => Promise<T>): Promise<{
+    data: T;
+    tokenUsage: TokenUsage;
+  }> {
+    const data = await executeWithTimeout(fn, this.config.timeoutMs);
+    const tokenUsage =
+      extractProviderUsage(data) ?? (await estimateTokensFromValue(data, this.config.tokenizer));
+
+    return { data, tokenUsage };
+  }
+
+  private processSuccessfulAttempt(tokenUsage: TokenUsage) {
+    mergeTokenUsage(this.usage, tokenUsage);
+
+    const estimatedCostUsd = estimateCostUsd(this.config, this.usage);
+
+    if (estimatedCostUsd !== undefined) {
+      this.usage.estimatedCostUsd = estimatedCostUsd;
+    }
+
+    const usageSnapshot = this.snapshotUsage();
+
+    if (isDryRunMode(this.config)) {
+      this.recordWouldBlockReasons(getPostCallLimitViolations(this.config, usageSnapshot));
+    } else {
+      checkPostCallLimits(this.config, usageSnapshot);
+    }
+
+    this.setStatus("success");
+  }
+
+  private async handleAttemptError(
+    error: unknown,
+    attempt: number,
+    maxRetries: number,
+  ): Promise<{
+    shouldRetry: boolean;
+    errorToThrow?: unknown;
+  }> {
+    if (error instanceof TimeoutError) {
+      this.setStatus("timeout", "TIMEOUT");
+      await this.logOnce();
+      return {
+        shouldRetry: false,
+        errorToThrow: new TimeoutError(error.message, this.snapshotUsage()),
+      };
+    }
+
+    if (
+      error instanceof BudgetExceededError ||
+      error instanceof TokenLimitExceededError ||
+      error instanceof CallLimitExceededError
+    ) {
+      this.setStatus("blocked", error.code);
+      await this.logOnce();
+      return {
+        shouldRetry: false,
+        errorToThrow: attachUsage(error, this.snapshotUsage()),
+      };
+    }
+
+    const canRetry = attempt < maxRetries;
+
+    if (canRetry) {
+      this.usage.retries += 1;
+      return { shouldRetry: true }; // Signal to retry
+    }
+
+    this.setStatus("failed");
+    await this.logOnce();
+
+    if (error instanceof GuardError) {
+      return {
+        shouldRetry: false,
+        errorToThrow: attachUsage(error, this.snapshotUsage()),
+      };
+    }
+
+    return {
+      shouldRetry: false,
+      errorToThrow: error,
+    };
+  }
+
+  async call<T>(_name: string, fn: () => Promise<T>): Promise<T> {
+    await this.handlePreCallLimits();
 
     this.usage.calls += 1;
 
@@ -343,61 +464,20 @@ class GuardRunController {
 
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
-        const data = await executeWithTimeout(fn, this.config.timeoutMs);
-        const tokenUsage =
-          extractProviderUsage(data) ??
-          (await estimateTokensFromValue(data, this.config.tokenizer));
-        mergeTokenUsage(this.usage, tokenUsage);
-
-        const estimatedCostUsd = estimateCostUsd(this.config, this.usage);
-
-        if (estimatedCostUsd !== undefined) {
-          this.usage.estimatedCostUsd = estimatedCostUsd;
-        }
-
-        const usageSnapshot = this.snapshotUsage();
-
-        if (isDryRunMode(this.config)) {
-          this.recordWouldBlockReasons(getPostCallLimitViolations(this.config, usageSnapshot));
-        } else {
-          checkPostCallLimits(this.config, usageSnapshot);
-        }
-
-        this.setStatus("success");
+        const { data, tokenUsage } = await this.executeSingleAttempt(fn);
+        this.processSuccessfulAttempt(tokenUsage);
 
         return data;
       } catch (error) {
-        if (error instanceof TimeoutError) {
-          this.setStatus("timeout", "TIMEOUT");
-          await this.logOnce();
-          throw new TimeoutError(error.message, this.snapshotUsage());
+        const result = await this.handleAttemptError(error, attempt, maxRetries);
+
+        if (result.shouldRetry) {
+          continue; // Retry the attempt
         }
 
-        if (
-          error instanceof BudgetExceededError ||
-          error instanceof TokenLimitExceededError ||
-          error instanceof CallLimitExceededError
-        ) {
-          this.setStatus("blocked", error.code);
-          await this.logOnce();
-          throw attachUsage(error, this.snapshotUsage());
+        if (result.errorToThrow) {
+          throw result.errorToThrow;
         }
-
-        const canRetry = attempt < maxRetries;
-
-        if (canRetry) {
-          this.usage.retries += 1;
-          continue;
-        }
-
-        this.setStatus("failed");
-        await this.logOnce();
-
-        if (error instanceof GuardError) {
-          throw attachUsage(error, this.snapshotUsage());
-        }
-
-        throw error;
       }
     }
 

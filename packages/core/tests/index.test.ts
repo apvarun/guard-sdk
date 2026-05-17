@@ -119,6 +119,31 @@ test("budget limit is enforced", async () => {
   ).rejects.toBeInstanceOf(BudgetExceededError);
 });
 
+test("budget limit is enforced when provider reports only total_tokens", async () => {
+  const pricing = createPricingResolver([
+    {
+      provider: "openai",
+      model: "gpt-test",
+      inputPerMillionTokens: 1,
+      outputPerMillionTokens: 1,
+    },
+  ]);
+
+  await expect(
+    guard.run(
+      async () => ({
+        usage: { total_tokens: 1_000_000 },
+      }),
+      {
+        provider: "openai",
+        model: "gpt-test",
+        maxCostUsd: 0.5,
+        pricing,
+      },
+    ),
+  ).rejects.toBeInstanceOf(BudgetExceededError);
+});
+
 test("custom tokenizer is used when provider usage is missing", async () => {
   const { usage } = await guard.run(async () => ({ message: "hello" }), {
     tokenizer: async () => 42,
@@ -370,4 +395,14 @@ test("guard errors carry code and usage", async () => {
     code: "CALL_LIMIT_EXCEEDED",
   });
   await expect(guard.run(async () => "never", { maxCalls: 0 })).rejects.toBeInstanceOf(GuardError);
+});
+
+test("pre-call blocked errors include blocked usage snapshot", async () => {
+  await expect(guard.run(async () => "never", { maxCalls: 0 })).rejects.toMatchObject({
+    code: "CALL_LIMIT_EXCEEDED",
+    usage: {
+      status: "blocked",
+      blockedReason: "CALL_LIMIT_EXCEEDED",
+    },
+  });
 });

@@ -135,6 +135,26 @@ function assertTableExists(database: Database.Database, tableName: string) {
   }
 }
 
+function buildInsertParams(usage: GuardUsage) {
+  return {
+    runId: usage.runId,
+    name: usage.name ?? null,
+    userId: usage.userId ?? null,
+    provider: usage.provider ?? null,
+    model: usage.model ?? null,
+    inputTokens: usage.inputTokens ?? null,
+    outputTokens: usage.outputTokens ?? null,
+    totalTokens: usage.totalTokens ?? null,
+    estimatedCostUsd: usage.estimatedCostUsd ?? null,
+    calls: usage.calls,
+    retries: usage.retries,
+    durationMs: usage.durationMs,
+    status: usage.status,
+    blockedReason: usage.blockedReason ?? null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 export async function createSQLiteLogger(options: SQLiteLoggerOptions): Promise<GuardLogger> {
   const tableName = options.tableName ?? DEFAULT_TABLE_NAME;
   validateTableName(tableName);
@@ -191,23 +211,7 @@ INSERT INTO "${tableName}" (
       writeQueue = writeQueue
         .catch(() => undefined)
         .then(() => {
-          insertStatement.run({
-            runId: usageSnapshot.runId,
-            name: usageSnapshot.name ?? null,
-            userId: usageSnapshot.userId ?? null,
-            provider: usageSnapshot.provider ?? null,
-            model: usageSnapshot.model ?? null,
-            inputTokens: usageSnapshot.inputTokens ?? null,
-            outputTokens: usageSnapshot.outputTokens ?? null,
-            totalTokens: usageSnapshot.totalTokens ?? null,
-            estimatedCostUsd: usageSnapshot.estimatedCostUsd ?? null,
-            calls: usageSnapshot.calls,
-            retries: usageSnapshot.retries,
-            durationMs: usageSnapshot.durationMs,
-            status: usageSnapshot.status,
-            blockedReason: usageSnapshot.blockedReason ?? null,
-            createdAt: new Date().toISOString(),
-          });
+          insertStatement.run(buildInsertParams(usageSnapshot));
         });
 
       return writeQueue;

@@ -84,6 +84,30 @@ function pickModel(
   return undefined;
 }
 
+function extractTokenWithFallback(
+  record: Record<string, unknown>,
+  primary: string,
+  fallback: string,
+): number | undefined {
+  return toFiniteNumber(record[primary]) ?? toFiniteNumber(record[fallback]);
+}
+
+function calculateTotalTokens(
+  explicitTotal: number | undefined,
+  inputTokens: number | undefined,
+  outputTokens: number | undefined,
+): number | undefined {
+  if (explicitTotal !== undefined) {
+    return explicitTotal;
+  }
+
+  if (inputTokens !== undefined || outputTokens !== undefined) {
+    return (inputTokens ?? 0) + (outputTokens ?? 0);
+  }
+
+  return undefined;
+}
+
 function normalizeUsage(usage: unknown): GuardUsageEnvelope["usage"] | undefined {
   if (!usage || typeof usage !== "object") {
     return undefined;
@@ -91,23 +115,20 @@ function normalizeUsage(usage: unknown): GuardUsageEnvelope["usage"] | undefined
 
   const record = usage as Record<string, unknown>;
 
-  const inputTokens = toFiniteNumber(record.promptTokens) ?? toFiniteNumber(record.inputTokens);
-  const outputTokens =
-    toFiniteNumber(record.completionTokens) ?? toFiniteNumber(record.outputTokens);
+  const inputTokens = extractTokenWithFallback(record, "promptTokens", "inputTokens");
+  const outputTokens = extractTokenWithFallback(record, "completionTokens", "outputTokens");
   const totalTokens = toFiniteNumber(record.totalTokens);
 
   if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) {
     return undefined;
   }
 
+  const calculatedTotal = calculateTotalTokens(totalTokens, inputTokens, outputTokens);
+
   return {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
-    total_tokens:
-      totalTokens ??
-      (inputTokens !== undefined || outputTokens !== undefined
-        ? (inputTokens ?? 0) + (outputTokens ?? 0)
-        : undefined),
+    total_tokens: calculatedTotal,
   };
 }
 
@@ -214,6 +235,62 @@ function wrapAsyncIterable<T>(
   };
 }
 
+function handlePromiseProperty<T>(
+  target: object,
+  property: PropertyKey,
+  receiver: unknown,
+  finalize: () => Promise<void>,
+): Promise<T> | undefined {
+  const value = Reflect.get(target, property, receiver);
+
+  if (value === undefined) {
+    return value as undefined;
+  }
+
+  return wrapTerminalPromise(asPromise(value as PromiseLike<T> | T), finalize);
+}
+
+function handleConsumeStreamProperty(
+  target: object,
+  property: PropertyKey,
+  finalize: () => Promise<void>,
+): ((options?: unknown) => Promise<void>) | undefined {
+  const value = Reflect.get(target, property);
+
+  if (typeof value !== "function") {
+    return value as undefined;
+  }
+
+  return async (options?: unknown) => {
+    await (value as (options?: unknown) => Promise<void>).call(target, options);
+    await finalize();
+  };
+}
+
+function handleAsyncIterableProperty(
+  target: object,
+  property: PropertyKey,
+  finalize: () => Promise<void>,
+): AsyncIterable<unknown> | undefined {
+  const value = Reflect.get(target, property);
+
+  if (!value || typeof value !== "object" || Symbol.asyncIterator in (value as object) === false) {
+    return value as undefined;
+  }
+
+  return wrapAsyncIterable(value as AsyncIterable<unknown>, finalize);
+}
+
+function handleDefaultProperty(target: object, property: PropertyKey, receiver: unknown): unknown {
+  const value = Reflect.get(target, property, receiver);
+
+  if (typeof value === "function") {
+    return (value as (...args: unknown[]) => unknown).bind(target);
+  }
+
+  return value;
+}
+
 function wrapStreamResult<TStreamResult extends VercelStreamResultLike>(
   streamResult: TStreamResult,
   mergedConfig: GuardConfig,
@@ -232,84 +309,19 @@ function wrapStreamResult<TStreamResult extends VercelStreamResultLike>(
 
   return new Proxy(streamResult as object, {
     get(target, property, receiver) {
-      if (property === "text") {
-        const value = Reflect.get(target, property, receiver);
-
-        if (value === undefined) {
-          return value;
-        }
-
-        return wrapTerminalPromise(asPromise(value), finalize);
-      }
-
-      if (property === "usage") {
-        const value = Reflect.get(target, property, receiver);
-
-        if (value === undefined) {
-          return value;
-        }
-
-        return wrapTerminalPromise(asPromise(value), finalize);
-      }
-
-      if (property === "totalUsage") {
-        const value = Reflect.get(target, property, receiver);
-
-        if (value === undefined) {
-          return value;
-        }
-
-        return wrapTerminalPromise(asPromise(value), finalize);
+      if (property === "text" || property === "usage" || property === "totalUsage") {
+        return handlePromiseProperty(target, property, receiver, finalize);
       }
 
       if (property === "consumeStream") {
-        const value = Reflect.get(target, property, receiver);
-
-        if (typeof value !== "function") {
-          return value;
-        }
-
-        return async (options?: unknown) => {
-          await (value as (options?: unknown) => Promise<void>).call(target, options);
-          await finalize();
-        };
+        return handleConsumeStreamProperty(target, property, finalize);
       }
 
-      if (property === "textStream") {
-        const value = Reflect.get(target, property, receiver);
-
-        if (
-          !value ||
-          typeof value !== "object" ||
-          Symbol.asyncIterator in (value as object) === false
-        ) {
-          return value;
-        }
-
-        return wrapAsyncIterable(value as AsyncIterable<unknown>, finalize);
+      if (property === "textStream" || property === "fullStream") {
+        return handleAsyncIterableProperty(target, property, finalize);
       }
 
-      if (property === "fullStream") {
-        const value = Reflect.get(target, property, receiver);
-
-        if (
-          !value ||
-          typeof value !== "object" ||
-          Symbol.asyncIterator in (value as object) === false
-        ) {
-          return value;
-        }
-
-        return wrapAsyncIterable(value as AsyncIterable<unknown>, finalize);
-      }
-
-      const value = Reflect.get(target, property, receiver);
-
-      if (typeof value === "function") {
-        return value.bind(target);
-      }
-
-      return value;
+      return handleDefaultProperty(target, property, receiver);
     },
   }) as TStreamResult;
 }

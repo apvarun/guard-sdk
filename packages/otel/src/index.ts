@@ -111,6 +111,26 @@ function shouldSample(sampleRate: number, random: () => number): boolean {
   return random() < sampleRate;
 }
 
+function setOptionalAttribute<T>(
+  attributes: GuardTelemetryAttributes,
+  key: GuardTelemetryAttributeKey,
+  value: T | undefined,
+): void {
+  if (value !== undefined) {
+    attributes[key] = value as OpenTelemetryAttributeValue;
+  }
+}
+
+function setOptionalArrayAttribute<T>(
+  attributes: GuardTelemetryAttributes,
+  key: GuardTelemetryAttributeKey,
+  value: T[] | undefined,
+): void {
+  if (value && value.length > 0) {
+    attributes[key] = value as OpenTelemetryAttributeValue;
+  }
+}
+
 function buildTelemetryAttributes(usage: GuardUsage): GuardTelemetryAttributes {
   const attributes: GuardTelemetryAttributes = {
     [GUARD_TELEMETRY_ATTRIBUTE_KEYS.schemaVersion]: GUARD_TELEMETRY_SCHEMA_VERSION,
@@ -121,49 +141,29 @@ function buildTelemetryAttributes(usage: GuardUsage): GuardTelemetryAttributes {
     [GUARD_TELEMETRY_ATTRIBUTE_KEYS.durationMs]: usage.durationMs,
   };
 
-  if (usage.name) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.name] = usage.name;
-  }
-
-  if (usage.userId) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.userId] = usage.userId;
-  }
-
-  if (usage.provider) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.provider] = usage.provider;
-  }
-
-  if (usage.model) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.model] = usage.model;
-  }
-
-  if (usage.blockedReason) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.blockedReason] = usage.blockedReason;
-  }
-
-  if (usage.inputTokens !== undefined) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.inputTokens] = usage.inputTokens;
-  }
-
-  if (usage.outputTokens !== undefined) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.outputTokens] = usage.outputTokens;
-  }
-
-  if (usage.totalTokens !== undefined) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.totalTokens] = usage.totalTokens;
-  }
-
-  if (usage.estimatedCostUsd !== undefined) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.estimatedCostUsd] = usage.estimatedCostUsd;
-  }
-
-  if (usage.wouldBlock !== undefined) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.wouldBlock] = usage.wouldBlock;
-  }
-
-  if (usage.wouldBlockReasons && usage.wouldBlockReasons.length > 0) {
-    attributes[GUARD_TELEMETRY_ATTRIBUTE_KEYS.wouldBlockReasons] = [...usage.wouldBlockReasons];
-  }
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.name, usage.name);
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.userId, usage.userId);
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.provider, usage.provider);
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.model, usage.model);
+  setOptionalAttribute(
+    attributes,
+    GUARD_TELEMETRY_ATTRIBUTE_KEYS.blockedReason,
+    usage.blockedReason,
+  );
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.inputTokens, usage.inputTokens);
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.outputTokens, usage.outputTokens);
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.totalTokens, usage.totalTokens);
+  setOptionalAttribute(
+    attributes,
+    GUARD_TELEMETRY_ATTRIBUTE_KEYS.estimatedCostUsd,
+    usage.estimatedCostUsd,
+  );
+  setOptionalAttribute(attributes, GUARD_TELEMETRY_ATTRIBUTE_KEYS.wouldBlock, usage.wouldBlock);
+  setOptionalArrayAttribute(
+    attributes,
+    GUARD_TELEMETRY_ATTRIBUTE_KEYS.wouldBlockReasons,
+    usage.wouldBlockReasons,
+  );
 
   return attributes;
 }
