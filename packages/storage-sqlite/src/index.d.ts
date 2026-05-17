@@ -3,6 +3,10 @@ export type SQLiteLoggerOptions = {
     dbPath: string;
     mkdir?: boolean;
     tableName?: string;
+    maxPendingWrites?: number;
+};
+export type SQLiteLogger = GuardLogger & {
+    close: () => void;
 };
 export type UsageReportFilters = {
     from?: string;
@@ -27,5 +31,5 @@ export type UsageReportSummary = {
         estimatedCostUsd: number;
     };
 };
-export declare function createSQLiteLogger(options: SQLiteLoggerOptions): Promise<GuardLogger>;
+export declare function createSQLiteLogger(options: SQLiteLoggerOptions): Promise<SQLiteLogger>;
 export declare function readUsageReport(options: ReadUsageReportOptions): UsageReportSummary;

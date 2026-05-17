@@ -1,9 +1,31 @@
 import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import Database from "better-sqlite3";
 import type { GuardLogger, GuardStatus, GuardUsage } from "@guard-sdk/core";
 
 const DEFAULT_TABLE_NAME = "guard_usage";
+const DEFAULT_MAX_PENDING_WRITES = 1000;
+
+const SQLITE_WRITE_QUEUE_FULL_ERROR = "SQLITE_WRITE_QUEUE_FULL";
+const SQLITE_LOGGER_CLOSED_ERROR = "SQLITE_LOGGER_CLOSED";
+
+class SQLiteLoggerQueueFullError extends Error {
+  readonly code = SQLITE_WRITE_QUEUE_FULL_ERROR;
+
+  constructor(maxPendingWrites: number) {
+    super(`SQLite logger queue is full (maxPendingWrites: ${maxPendingWrites}).`);
+    this.name = "SQLiteLoggerQueueFullError";
+  }
+}
+
+class SQLiteLoggerClosedError extends Error {
+  readonly code = SQLITE_LOGGER_CLOSED_ERROR;
+
+  constructor() {
+    super("SQLite logger is closed.");
+    this.name = "SQLiteLoggerClosedError";
+  }
+}
 
 type DatabaseRow = {
   totalRuns: number;
@@ -23,6 +45,11 @@ export type SQLiteLoggerOptions = {
   dbPath: string;
   mkdir?: boolean;
   tableName?: string;
+  maxPendingWrites?: number;
+};
+
+export type SQLiteLogger = GuardLogger & {
+  close: () => void;
 };
 
 export type UsageReportFilters = {
@@ -57,9 +84,63 @@ function validateTableName(tableName: string) {
   }
 }
 
+function sqlIdentifier(identifier: string): string {
+  validateTableName(identifier);
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+function validateMaxPendingWrites(maxPendingWrites: number) {
+  if (!Number.isInteger(maxPendingWrites) || maxPendingWrites <= 0) {
+    throw new Error(`maxPendingWrites must be a positive integer. Received: ${maxPendingWrites}`);
+  }
+}
+
+function resolveSafeFilePath(pathValue: string, label: string): string {
+  if (!pathValue || typeof pathValue !== "string") {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+
+  let decodedPath: string;
+
+  try {
+    decodedPath = decodeURIComponent(pathValue);
+  } catch {
+    throw new Error(`${label} contains invalid URI encoding.`);
+  }
+
+  if (decodedPath.includes("\0")) {
+    throw new Error(`${label} contains invalid null bytes.`);
+  }
+
+  if (isAbsolute(decodedPath)) {
+    return resolve(decodedPath);
+  }
+
+  const normalizedForTraversal = decodedPath.replaceAll("\\", "/");
+
+  if (normalizedForTraversal.split("/").includes("..")) {
+    throw new Error(`${label} must not contain path traversal segments.`);
+  }
+
+  const resolvedPath = resolve(process.cwd(), decodedPath);
+  const relativePath = relative(process.cwd(), resolvedPath);
+
+  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    throw new Error(`${label} resolves outside the current working directory.`);
+  }
+
+  return resolvedPath;
+}
+
 function createSchemaSql(tableName: string) {
+  const tableIdentifier = sqlIdentifier(tableName);
+  const createdAtIndexIdentifier = sqlIdentifier(`${tableName}_created_at_idx`);
+  const statusIndexIdentifier = sqlIdentifier(`${tableName}_status_idx`);
+  const nameIndexIdentifier = sqlIdentifier(`${tableName}_name_idx`);
+  const createdAtStatusIndexIdentifier = sqlIdentifier(`${tableName}_created_at_status_idx`);
+
   return `
-CREATE TABLE IF NOT EXISTS "${tableName}" (
+CREATE TABLE IF NOT EXISTS ${tableIdentifier} (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT NOT NULL UNIQUE,
   name TEXT,
@@ -77,10 +158,10 @@ CREATE TABLE IF NOT EXISTS "${tableName}" (
   blocked_reason TEXT,
   created_at TEXT NOT NULL
 );
-CREATE INDEX IF NOT EXISTS "${tableName}_created_at_idx" ON "${tableName}" (created_at);
-CREATE INDEX IF NOT EXISTS "${tableName}_status_idx" ON "${tableName}" (status);
-CREATE INDEX IF NOT EXISTS "${tableName}_name_idx" ON "${tableName}" (name);
-CREATE INDEX IF NOT EXISTS "${tableName}_created_at_status_idx" ON "${tableName}" (created_at, status);
+CREATE INDEX IF NOT EXISTS ${createdAtIndexIdentifier} ON ${tableIdentifier} (created_at);
+CREATE INDEX IF NOT EXISTS ${statusIndexIdentifier} ON ${tableIdentifier} (status);
+CREATE INDEX IF NOT EXISTS ${nameIndexIdentifier} ON ${tableIdentifier} (name);
+CREATE INDEX IF NOT EXISTS ${createdAtStatusIndexIdentifier} ON ${tableIdentifier} (created_at, status);
 `;
 }
 
@@ -155,19 +236,41 @@ function buildInsertParams(usage: GuardUsage) {
   };
 }
 
-export async function createSQLiteLogger(options: SQLiteLoggerOptions): Promise<GuardLogger> {
+export async function createSQLiteLogger(options: SQLiteLoggerOptions): Promise<SQLiteLogger> {
   const tableName = options.tableName ?? DEFAULT_TABLE_NAME;
   validateTableName(tableName);
 
+  const maxPendingWrites = options.maxPendingWrites ?? DEFAULT_MAX_PENDING_WRITES;
+  validateMaxPendingWrites(maxPendingWrites);
+
+  const dbPath = resolveSafeFilePath(options.dbPath, "dbPath");
+
   if (options.mkdir ?? true) {
-    await mkdir(dirname(options.dbPath), { recursive: true });
+    await mkdir(dirname(dbPath), { recursive: true });
   }
 
-  const database = new Database(options.dbPath);
-  database.exec(createSchemaSql(tableName));
+  let database: Database.Database | undefined;
+
+  try {
+    database = new Database(dbPath);
+    database.exec(createSchemaSql(tableName));
+  } catch (error) {
+    if (database) {
+      try {
+        database.close();
+      } catch {
+        // ignore close errors during init failure.
+      }
+    }
+
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to initialize SQLite logger at "${dbPath}": ${reason}`);
+  }
+
+  const tableIdentifier = sqlIdentifier(tableName);
 
   const insertStatement = database.prepare(`
-INSERT INTO "${tableName}" (
+INSERT INTO ${tableIdentifier} (
   run_id,
   name,
   user_id,
@@ -203,18 +306,65 @@ INSERT INTO "${tableName}" (
 `);
 
   let writeQueue = Promise.resolve();
+  let pendingWrites = 0;
+  let acceptsWrites = true;
+  let isClosed = false;
+  let closeScheduled = false;
+
+  const closeDatabase = () => {
+    if (isClosed) {
+      return;
+    }
+
+    isClosed = true;
+    database.close();
+  };
 
   return {
     log(usage: GuardUsage) {
+      if (!acceptsWrites || isClosed) {
+        return Promise.reject(new SQLiteLoggerClosedError());
+      }
+
+      if (pendingWrites >= maxPendingWrites) {
+        return Promise.reject(new SQLiteLoggerQueueFullError(maxPendingWrites));
+      }
+
       const usageSnapshot = { ...usage };
+      pendingWrites += 1;
+
+      const currentWrite = writeQueue
+        .catch(() => undefined)
+        .then(() => {
+          insertStatement.run(buildInsertParams(usageSnapshot));
+        })
+        .finally(() => {
+          pendingWrites -= 1;
+        });
+
+      writeQueue = currentWrite.catch(() => undefined);
+
+      return currentWrite;
+    },
+
+    close() {
+      if (isClosed || closeScheduled) {
+        return;
+      }
+
+      acceptsWrites = false;
+      closeScheduled = true;
+
+      if (pendingWrites === 0) {
+        closeDatabase();
+        return;
+      }
 
       writeQueue = writeQueue
         .catch(() => undefined)
         .then(() => {
-          insertStatement.run(buildInsertParams(usageSnapshot));
+          closeDatabase();
         });
-
-      return writeQueue;
     },
   };
 }
@@ -223,10 +373,14 @@ export function readUsageReport(options: ReadUsageReportOptions): UsageReportSum
   const tableName = options.tableName ?? DEFAULT_TABLE_NAME;
   validateTableName(tableName);
 
-  const database = new Database(options.dbPath, {
+  const dbPath = resolveSafeFilePath(options.dbPath, "dbPath");
+
+  const database = new Database(dbPath, {
     readonly: true,
     fileMustExist: true,
   });
+
+  const tableIdentifier = sqlIdentifier(tableName);
 
   try {
     assertTableExists(database, tableName);
@@ -242,7 +396,7 @@ export function readUsageReport(options: ReadUsageReportOptions): UsageReportSum
           COALESCE(SUM(estimated_cost_usd), 0) AS totalEstimatedCostUsd,
           COALESCE(SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END), 0) AS blockedCalls,
           COALESCE(SUM(CASE WHEN status = 'timeout' THEN 1 ELSE 0 END), 0) AS timeouts
-        FROM "${tableName}"
+        FROM ${tableIdentifier}
         ${whereClause}`,
       )
       .get(params) as DatabaseRow;
@@ -253,7 +407,7 @@ export function readUsageReport(options: ReadUsageReportOptions): UsageReportSum
           run_id AS runId,
           name,
           estimated_cost_usd AS estimatedCostUsd
-        FROM "${tableName}"
+        FROM ${tableIdentifier}
         ${whereClause}
         ORDER BY estimated_cost_usd DESC, created_at ASC
         LIMIT 1`,

@@ -337,6 +337,18 @@ test("json file logger creates parent directory by default", async () => {
   }
 });
 
+test("json file logger rejects traversal paths", () => {
+  expect(() => createJsonFileLogger({ filePath: "../outside/usage.jsonl" })).toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+  expect(() => createJsonFileLogger({ filePath: "..\\\\outside\\\\usage.jsonl" })).toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+  expect(() => createJsonFileLogger({ filePath: "%2E%2E/outside/usage.jsonl" })).toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+});
+
 test("json file logger propagates append errors", async () => {
   const directory = await mkdtemp(join(tmpdir(), "guard-sdk-core-"));
   const filePath = join(directory, "missing", "usage.jsonl");

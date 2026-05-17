@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import Database from "better-sqlite3";
@@ -193,6 +193,128 @@ test("readUsageReport errors when table is missing", async () => {
     database.close();
 
     expect(() => readUsageReport({ dbPath })).toThrow(/does not exist/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSQLiteLogger rejects invalid table names before touching the database file", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-sqlite-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    await expect(
+      createSQLiteLogger({
+        dbPath,
+        tableName: 'guard_usage"; DROP TABLE guard_usage; --',
+      }),
+    ).rejects.toThrow(/Invalid SQLite table name/i);
+
+    await expect(access(dbPath)).rejects.toThrow();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSQLiteLogger rejects traversal paths", async () => {
+  await expect(createSQLiteLogger({ dbPath: "../outside/usage.db" })).rejects.toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+  await expect(createSQLiteLogger({ dbPath: "..\\\\outside\\\\usage.db" })).rejects.toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+  await expect(createSQLiteLogger({ dbPath: "%2E%2E/outside/usage.db" })).rejects.toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+});
+
+test("readUsageReport rejects traversal paths", () => {
+  expect(() => readUsageReport({ dbPath: "../outside/usage.db" })).toThrow(
+    /path traversal|outside the current working directory/i,
+  );
+});
+
+test("createSQLiteLogger enforces maxPendingWrites and fails fast", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-sqlite-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    const logger = await createSQLiteLogger({ dbPath, maxPendingWrites: 1 });
+
+    const firstWrite = logger.log(usage({ runId: "run-1" }));
+    const secondWrite = logger.log(usage({ runId: "run-2" }));
+
+    await expect(secondWrite).rejects.toThrow(/queue is full/i);
+    await expect(firstWrite).resolves.toBeUndefined();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSQLiteLogger queue drains after a transient write failure", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-sqlite-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    const logger = await createSQLiteLogger({ dbPath });
+
+    await logger.log(usage({ runId: "run-1" }));
+    await expect(logger.log(usage({ runId: "run-1" }))).rejects.toThrow(
+      /UNIQUE constraint failed/i,
+    );
+    await expect(logger.log(usage({ runId: "run-2" }))).resolves.toBeUndefined();
+
+    const report = readUsageReport({ dbPath });
+    expect(report.totalRuns).toBe(2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSQLiteLogger preserves write errors without swallowing persistent failures", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-sqlite-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    const logger = await createSQLiteLogger({ dbPath });
+
+    await logger.log(usage({ runId: "run-1" }));
+    await expect(logger.log(usage({ runId: "run-1" }))).rejects.toThrow(
+      /UNIQUE constraint failed/i,
+    );
+    await expect(logger.log(usage({ runId: "run-1" }))).rejects.toThrow(
+      /UNIQUE constraint failed/i,
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSQLiteLogger close is idempotent and rejects writes after close", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-sqlite-"));
+  const dbPath = join(directory, "usage.db");
+
+  try {
+    const logger = await createSQLiteLogger({ dbPath });
+    await logger.log(usage({ runId: "run-1" }));
+
+    logger.close();
+    logger.close();
+
+    await expect(logger.log(usage({ runId: "run-2" }))).rejects.toThrow(/closed/i);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("createSQLiteLogger surfaces actionable initialization errors", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "guard-sdk-sqlite-"));
+  const dbPath = join(directory, "missing", "usage.db");
+
+  try {
+    await expect(createSQLiteLogger({ dbPath, mkdir: false })).rejects.toThrow(
+      /Failed to initialize SQLite logger/i,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

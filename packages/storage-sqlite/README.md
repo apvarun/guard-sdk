@@ -17,12 +17,16 @@ import { createSQLiteLogger } from "@guard-sdk/storage-sqlite";
 
 const logger = await createSQLiteLogger({
   dbPath: "./.guard/usage.db",
+  maxPendingWrites: 1000,
 });
 
 await guard.run(async () => "ok", {
   name: "sqlite-example",
   logger,
 });
+
+// Optional: close when the process is done writing logs.
+logger.close();
 ```
 
 ### Programmatic report query

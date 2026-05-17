@@ -1,5 +1,5 @@
 import { appendFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import type { GuardLogger, GuardUsage } from "./types.js";
 
 export type MemoryLogger = GuardLogger & {
@@ -12,6 +12,43 @@ export type JsonFileLoggerOptions = {
   mkdir?: boolean;
   serialize?: (usage: GuardUsage) => string;
 };
+
+function resolveSafeFilePath(pathValue: string, label: string): string {
+  if (!pathValue || typeof pathValue !== "string") {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+
+  let decodedPath: string;
+
+  try {
+    decodedPath = decodeURIComponent(pathValue);
+  } catch {
+    throw new Error(`${label} contains invalid URI encoding.`);
+  }
+
+  if (decodedPath.includes("\0")) {
+    throw new Error(`${label} contains invalid null bytes.`);
+  }
+
+  if (isAbsolute(decodedPath)) {
+    return resolve(decodedPath);
+  }
+
+  const normalizedForTraversal = decodedPath.replaceAll("\\", "/");
+
+  if (normalizedForTraversal.split("/").includes("..")) {
+    throw new Error(`${label} must not contain path traversal segments.`);
+  }
+
+  const resolvedPath = resolve(process.cwd(), decodedPath);
+  const relativePath = relative(process.cwd(), resolvedPath);
+
+  if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+    throw new Error(`${label} resolves outside the current working directory.`);
+  }
+
+  return resolvedPath;
+}
 
 export function createConsoleLogger(): GuardLogger {
   return {
@@ -39,6 +76,7 @@ export function createMemoryLogger(initial: GuardUsage[] = []): MemoryLogger {
 
 export function createJsonFileLogger(options: JsonFileLoggerOptions): GuardLogger {
   const ensureDirectory = options.mkdir ?? true;
+  const filePath = resolveSafeFilePath(options.filePath, "filePath");
   const serialize =
     options.serialize ??
     ((usage: GuardUsage) => {
@@ -48,11 +86,11 @@ export function createJsonFileLogger(options: JsonFileLoggerOptions): GuardLogge
   return {
     async log(usage: GuardUsage) {
       if (ensureDirectory) {
-        await mkdir(dirname(options.filePath), { recursive: true });
+        await mkdir(dirname(filePath), { recursive: true });
       }
 
       const serialized = serialize({ ...usage }).replace(/\r?\n$/, "");
-      await appendFile(options.filePath, `${serialized}\n`, "utf8");
+      await appendFile(filePath, `${serialized}\n`, "utf8");
     },
   };
 }
