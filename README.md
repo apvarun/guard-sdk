@@ -7,10 +7,25 @@
 
 Cost limits, timeouts, and circuit breakers for AI agents.
 
-- **Docs**: [guard-sdk.js.org](https://guard-sdk.js.org)
-- **License**: MIT
-- **Changelog**: [CHANGELOG.md](CHANGELOG.md)
-- **Minimum Node.js**: `>=22.12.0`
+## Why guard-sdk?
+
+AI agents can burn through budgets fast. A single runaway loop costs hundreds of dollars. guard-sdk puts guardrails around LLM calls:
+
+- Set USD cost limits per operation
+- Enforce token budgets with provider-aware counting
+- Add call limits for rate control
+- Timeout runaway operations
+- Log usage for debugging and analytics
+
+## Features
+
+- Cost limits with USD budgeting
+- Token limits with provider-aware counting
+- Call limits for rate control
+- Timeout enforcement
+- Dry-run mode for testing
+- Multiple logging backends (JSON, SQLite, OTEL)
+- Provider adapters (OpenAI, Anthropic, Vercel AI)
 
 ## Packages
 
@@ -34,6 +49,14 @@ These adapter packages require the corresponding peer dependency installed in yo
 | `@guard-sdk/vercel-ai` | `ai`                | `>=5.0.0`     |
 
 ## Install
+
+Requires Node.js >= 22.12.0
+
+```bash
+bun add @guard-sdk/core
+```
+
+This project uses Vite+ for development. After cloning the repo, run:
 
 ```bash
 vp install
@@ -378,12 +401,23 @@ for await (const chunk of streamed.textStream) {
 
 ## Examples
 
-- `examples/basic`
-- `examples/agent-loop`
-- `examples/basic-openai`
-- `examples/basic-anthropic`
-- `examples/basic-vercel-ai`
-- `examples/basic-otel`
+- `examples/basic` - Core guard.run usage with console logger
+- `examples/agent-loop` - Multi-step agent session with guard.createRun
+- `examples/basic-openai` - OpenAI adapter integration
+- `examples/basic-anthropic` - Anthropic adapter integration
+- `examples/basic-vercel-ai` - Vercel AI SDK adapter integration
+- `examples/basic-otel` - OpenTelemetry logging setup
+
+Run examples:
+
+```bash
+node examples/basic/index.js
+```
+
+## Community
+
+- 🐛 [Report bugs](https://github.com/apvarun/guard-sdk/issues)
+- 📖 [Documentation](https://guard-sdk.js.org)
 
 ## Development
 
