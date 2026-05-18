@@ -92,10 +92,27 @@ code {
 .site-nav a {
   text-decoration: none;
   color: var(--color-muted);
-  font-size: 0.93rem;
+  font-size: 1rem;
 }
 
 .site-nav a[aria-current="page"] {
+  color: var(--color-ink);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.github-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  color: var(--color-muted);
+}
+
+.github-link:hover {
   color: var(--color-ink);
 }
 
@@ -350,7 +367,27 @@ code {
   text-transform: uppercase;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
+}
+
+.footer-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  text-decoration: none;
+  color: var(--color-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.footer-github:hover {
+  color: var(--color-ink);
 }
 
 /* --- rendered README content --- */
@@ -434,14 +471,15 @@ code {
 
   .site-header {
     flex-wrap: wrap;
-    justify-content: flex-start;
+  }
+
+  .site-header .brand {
+    font-size: 1.25rem;
   }
 
   .site-nav {
     order: 3;
     width: 100%;
-    border-top: 1px solid var(--color-rule);
-    padding-top: 0.75rem;
   }
 
   .hero h1 {

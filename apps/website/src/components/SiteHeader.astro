@@ -1,5 +1,6 @@
 ---
 import GuardIcon from "./GuardIcon.astro";
+import GitHubIcon from "./GitHubIcon.astro";
 
 interface NavItem {
   label: string;
@@ -35,15 +36,31 @@ function isActive(href: string) {
 
   <nav aria-label="Primary">
     <ul class="site-nav">
-      {navItems.map((item) => (
-        <li>
-          <a href={item.href} aria-current={isActive(item.href) ? "page" : undefined}>
-            {item.label}
-          </a>
-        </li>
-      ))}
+      {
+        navItems.map((item) => (
+          <li>
+            <a
+              href={item.href}
+              aria-current={isActive(item.href) ? "page" : undefined}
+            >
+              {item.label}
+            </a>
+          </li>
+        ))
+      }
     </ul>
   </nav>
 
-  <a href="/packages" class="cta-link">Docs</a>
+  <div class="header-actions">
+    <a
+      target="_blank"
+      rel="noreferrer noopener"
+      href="https://github.com/apvarun/guard-sdk"
+      class="github-link"
+      aria-label="GitHub repository"
+    >
+      <GitHubIcon size={16} />
+    </a>
+    <a href="/packages" class="cta-link">Docs</a>
+  </div>
 </header>

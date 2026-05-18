@@ -1,10 +1,23 @@
 ---
 import GuardIcon from "./GuardIcon.astro";
+import GitHubIcon from "./GitHubIcon.astro";
 
 const year = new Date().getFullYear();
 ---
 
 <footer class="footer">
-  <GuardIcon size={14} />
-  <span>&copy; {year} guard-sdk</span>
+  <div class="footer-left">
+    <GuardIcon size={14} />
+    <span>&copy; {year} guard-sdk</span>
+  </div>
+  <a
+    target="_blank"
+    rel="noreferrer noopener"
+    href="https://github.com/apvarun/guard-sdk"
+    class="footer-github"
+    aria-label="GitHub repository"
+  >
+    <GitHubIcon size={14} />
+    <span>GitHub</span>
+  </a>
 </footer>
