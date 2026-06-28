@@ -10,6 +10,63 @@ import { createPricingResolver } from "@guard-sdk/pricing";
 import { createSQLiteLogger, readUsageReport } from "../../storage-sqlite/src/index.ts";
 import { createVercelAIGuard } from "../src/index.ts";
 
+function withAbortSignalAnyUnavailable<T>(fn: () => Promise<T>): Promise<T> {
+  const descriptor = Object.getOwnPropertyDescriptor(AbortSignal, "any");
+  Object.defineProperty(AbortSignal, "any", {
+    configurable: true,
+    value: undefined,
+  });
+
+  return fn().finally(() => {
+    if (descriptor) {
+      Object.defineProperty(AbortSignal, "any", descriptor);
+      return;
+    }
+
+    Reflect.deleteProperty(AbortSignal, "any");
+  });
+}
+
+function trackAbortListeners(signal: AbortSignal) {
+  const originalAdd = signal.addEventListener.bind(signal);
+  const originalRemove = signal.removeEventListener.bind(signal);
+  let added = 0;
+  let removed = 0;
+
+  signal.addEventListener = ((
+    type: Parameters<AbortSignal["addEventListener"]>[0],
+    listener: Parameters<AbortSignal["addEventListener"]>[1],
+    options: Parameters<AbortSignal["addEventListener"]>[2],
+  ) => {
+    if (type === "abort") {
+      added += 1;
+    }
+
+    return originalAdd(type, listener, options);
+  }) as AbortSignal["addEventListener"];
+
+  signal.removeEventListener = ((
+    type: Parameters<AbortSignal["removeEventListener"]>[0],
+    listener: Parameters<AbortSignal["removeEventListener"]>[1],
+    options: Parameters<AbortSignal["removeEventListener"]>[2],
+  ) => {
+    if (type === "abort") {
+      removed += 1;
+    }
+
+    return originalRemove(type, listener, options);
+  }) as AbortSignal["removeEventListener"];
+
+  return {
+    get added() {
+      return added;
+    },
+    get removed() {
+      return removed;
+    },
+  };
+}
+
 test("generateText returns raw response", async () => {
   const response = {
     text: "hello",
@@ -26,6 +83,68 @@ test("generateText returns raw response", async () => {
 
   const result = await guarded.generateText({ model: "gpt-4o-mini", prompt: "hi" });
   expect(result).toBe(response);
+});
+
+test("generateText fallback abort listeners are removed after success", async () => {
+  await withAbortSignalAnyUnavailable(async () => {
+    const caller = new AbortController();
+    const listeners = trackAbortListeners(caller.signal);
+
+    const guarded = createVercelAIGuard(
+      {
+        generateText: async () => ({
+          text: "hello",
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        }),
+        streamText: () => ({
+          text: Promise.resolve("hello"),
+          usage: Promise.resolve({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }),
+        }),
+      },
+      { timeoutMs: 100 },
+    );
+
+    await guarded.generateText({
+      model: "gpt-4o-mini",
+      prompt: "hi",
+      abortSignal: caller.signal,
+    });
+
+    expect(listeners.added).toBe(1);
+    expect(listeners.removed).toBe(1);
+  });
+});
+
+test("generateText fallback abort listeners are removed after provider failure", async () => {
+  await withAbortSignalAnyUnavailable(async () => {
+    const caller = new AbortController();
+    const listeners = trackAbortListeners(caller.signal);
+    const providerError = new Error("provider failed");
+
+    const guarded = createVercelAIGuard(
+      {
+        generateText: async () => {
+          throw providerError;
+        },
+        streamText: () => ({
+          text: Promise.resolve("hello"),
+          usage: Promise.resolve({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }),
+        }),
+      },
+      { timeoutMs: 100 },
+    );
+
+    await expect(
+      guarded.generateText({
+        model: "gpt-4o-mini",
+        prompt: "hi",
+        abortSignal: caller.signal,
+      }),
+    ).rejects.toBe(providerError);
+
+    expect(listeners.added).toBe(1);
+    expect(listeners.removed).toBe(1);
+  });
 });
 
 test("generateText supports usage field aliases", async () => {
@@ -256,6 +375,38 @@ test("streamText finalization runs once for text/usage/consumeStream", async () 
   expect(logs[0]?.status).toBe("success");
 });
 
+test("streamText fallback abort listeners are removed after finalization", async () => {
+  await withAbortSignalAnyUnavailable(async () => {
+    const caller = new AbortController();
+    const listeners = trackAbortListeners(caller.signal);
+
+    const guarded = createVercelAIGuard(
+      {
+        generateText: async () => ({
+          text: "ok",
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        }),
+        streamText: () => ({
+          text: Promise.resolve("stream"),
+          usage: Promise.resolve({ promptTokens: 1, completionTokens: 1, totalTokens: 2 }),
+        }),
+      },
+      { timeoutMs: 100 },
+    );
+
+    const result = guarded.streamText({
+      model: "gpt-4o-mini",
+      prompt: "hi",
+      abortSignal: caller.signal,
+    });
+
+    await result.text;
+
+    expect(listeners.added).toBe(1);
+    expect(listeners.removed).toBe(1);
+  });
+});
+
 test("streamText finalizes on async-iterator completion", async () => {
   const logger = createMemoryLogger();
 
@@ -476,4 +627,26 @@ test("supports sqlite logger in adapter config", async () => {
   } finally {
     await cleanup();
   }
+});
+
+test("generateText preserves a caller-supplied abortSignal", async () => {
+  const userController = new AbortController();
+  let received: { abortSignal?: AbortSignal } | undefined;
+
+  const guarded = createVercelAIGuard({
+    generateText: async (params: { abortSignal?: AbortSignal }) => {
+      received = params;
+      return { usage: { totalTokens: 1 } };
+    },
+    streamText: () => ({}) as never,
+  });
+
+  await guarded.generateText({ model: "gpt-4o-mini", abortSignal: userController.signal } as never);
+
+  // The signal handed to the SDK merges the guard signal with the caller's,
+  // so aborting the caller's controller still cancels the underlying call.
+  expect(received?.abortSignal).toBeInstanceOf(AbortSignal);
+  expect(received?.abortSignal?.aborted).toBe(false);
+  userController.abort();
+  expect(received?.abortSignal?.aborted).toBe(true);
 });

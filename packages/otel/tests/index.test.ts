@@ -200,7 +200,7 @@ test("works across success, failed, blocked, and timeout statuses", async () => 
       logger,
       maxCalls: 0,
     }),
-  ).rejects.toThrow(/Maximum call limit reached/);
+  ).rejects.toThrow(/Call limit reached/);
 
   await expect(
     guard.run(
@@ -254,7 +254,12 @@ test("logger propagation behavior matches GuardLogger contract", async () => {
 
   await expect(
     guard.run(async () => "ok", { logger: loggerWithThrowingLogEmitter }),
-  ).rejects.toThrow(/otel-emit-failed/);
+  ).resolves.toMatchObject({
+    data: "ok",
+    usage: {
+      status: "success",
+    },
+  });
 });
 
 test("high-volume logging overhead is bounded compared to memory logger baseline", () => {

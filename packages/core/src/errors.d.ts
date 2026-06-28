@@ -16,3 +16,8 @@ export declare class CallLimitExceededError extends GuardError {
 export declare class TimeoutError extends GuardError {
     constructor(message?: string, usage?: GuardUsage);
 }
+export declare class GuardConfigError extends GuardError {
+    /** The configuration field that failed validation, when known. */
+    readonly field?: string;
+    constructor(message?: string, field?: string);
+}

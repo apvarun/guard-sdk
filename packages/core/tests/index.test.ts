@@ -281,6 +281,21 @@ test("logger is called once with final usage", async () => {
   expect(logs[0]?.status).toBe("success");
 });
 
+test("logger failures do not break successful runs", async () => {
+  const logger = {
+    log() {
+      throw new Error("logger boom");
+    },
+  };
+
+  await expect(guard.run(async () => "ok", { logger })).resolves.toMatchObject({
+    data: "ok",
+    usage: {
+      status: "success",
+    },
+  });
+});
+
 test("run summary logs once even when called multiple times", async () => {
   const logger = createMemoryLogger();
   const run = guard.createRun({ logger });
@@ -349,14 +364,19 @@ test("json file logger rejects traversal paths", () => {
   );
 });
 
-test("json file logger propagates append errors", async () => {
+test("json file logger isolates append errors", async () => {
   const directory = await mkdtemp(join(tmpdir(), "guard-sdk-core-"));
   const filePath = join(directory, "missing", "usage.jsonl");
 
   try {
     const logger = createJsonFileLogger({ filePath, mkdir: false });
 
-    await expect(guard.run(async () => "ok", { logger })).rejects.toThrow(/ENOENT|no such file/i);
+    await expect(guard.run(async () => "ok", { logger })).resolves.toMatchObject({
+      data: "ok",
+      usage: {
+        status: "success",
+      },
+    });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -1,15 +1,15 @@
 {
-  "name": "@guard-sdk/anthropic",
+  "name": "@guard-sdk/budget",
   "version": "0.6.0",
-  "description": "Anthropic adapter for guard-sdk.",
+  "description": "Cross-run, per-user budget stores for guard-sdk.",
   "keywords": [
-    "adapter",
     "ai",
-    "anthropic",
+    "budget",
     "cost-control",
     "guard-sdk",
     "llm",
-    "timeouts"
+    "rate-limit",
+    "usage"
   ],
   "homepage": "https://github.com/apvarun/guard-sdk#readme",
   "bugs": {
@@ -43,13 +43,9 @@
     "@guard-sdk/core": "workspace:*"
   },
   "devDependencies": {
-    "@guard-sdk/pricing": "workspace:*",
     "@types/node": "^25.6.2",
     "@typescript/native-preview": "7.0.0-dev.20260509.2",
     "typescript": "^6.0.3",
     "vite-plus": "^0.1.20"
-  },
-  "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.61.0 <1"
   }
 }

@@ -61,9 +61,22 @@
         "ai": ">=5.0.0",
       },
     },
+    "examples/hooks": {
+      "name": "@guard-sdk/example-hooks",
+      "dependencies": {
+        "@guard-sdk/core": "workspace:*",
+      },
+    },
+    "examples/per-user-budget": {
+      "name": "@guard-sdk/example-per-user-budget",
+      "dependencies": {
+        "@guard-sdk/budget": "workspace:*",
+        "@guard-sdk/core": "workspace:*",
+      },
+    },
     "packages/anthropic": {
       "name": "@guard-sdk/anthropic",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@guard-sdk/core": "workspace:*",
       },
@@ -71,7 +84,6 @@
         "@guard-sdk/pricing": "workspace:*",
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
@@ -79,9 +91,22 @@
         "@anthropic-ai/sdk": ">=0.61.0 <1",
       },
     },
+    "packages/budget": {
+      "name": "@guard-sdk/budget",
+      "version": "0.6.0",
+      "dependencies": {
+        "@guard-sdk/core": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "^25.6.2",
+        "@typescript/native-preview": "7.0.0-dev.20260509.2",
+        "typescript": "^6.0.3",
+        "vite-plus": "^0.1.20",
+      },
+    },
     "packages/cli": {
       "name": "@guard-sdk/cli",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "bin": {
         "guard": "./dist/index.mjs",
       },
@@ -92,28 +117,26 @@
       "devDependencies": {
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
     },
     "packages/core": {
       "name": "@guard-sdk/core",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@guard-sdk/pricing": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
     },
     "packages/openai": {
       "name": "@guard-sdk/openai",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@guard-sdk/core": "workspace:*",
       },
@@ -121,7 +144,6 @@
         "@guard-sdk/pricing": "workspace:*",
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
@@ -131,32 +153,30 @@
     },
     "packages/otel": {
       "name": "@guard-sdk/otel",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@guard-sdk/core": "workspace:*",
       },
       "devDependencies": {
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
     },
     "packages/pricing": {
       "name": "@guard-sdk/pricing",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "devDependencies": {
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
     },
     "packages/storage-sqlite": {
       "name": "@guard-sdk/storage-sqlite",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@guard-sdk/core": "workspace:*",
         "better-sqlite3": "^12.0.0",
@@ -165,14 +185,13 @@
         "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
     },
     "packages/vercel-ai": {
       "name": "@guard-sdk/vercel-ai",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "dependencies": {
         "@guard-sdk/core": "workspace:*",
       },
@@ -180,7 +199,6 @@
         "@guard-sdk/pricing": "workspace:*",
         "@types/node": "^25.6.2",
         "@typescript/native-preview": "7.0.0-dev.20260509.2",
-        "bumpp": "^11.1.0",
         "typescript": "^6.0.3",
         "vite-plus": "^0.1.20",
       },
@@ -292,6 +310,8 @@
 
     "@guard-sdk/anthropic": ["@guard-sdk/anthropic@workspace:packages/anthropic"],
 
+    "@guard-sdk/budget": ["@guard-sdk/budget@workspace:packages/budget"],
+
     "@guard-sdk/cli": ["@guard-sdk/cli@workspace:packages/cli"],
 
     "@guard-sdk/core": ["@guard-sdk/core@workspace:packages/core"],
@@ -307,6 +327,10 @@
     "@guard-sdk/example-basic-otel": ["@guard-sdk/example-basic-otel@workspace:examples/basic-otel"],
 
     "@guard-sdk/example-basic-vercel-ai": ["@guard-sdk/example-basic-vercel-ai@workspace:examples/basic-vercel-ai"],
+
+    "@guard-sdk/example-hooks": ["@guard-sdk/example-hooks@workspace:examples/hooks"],
+
+    "@guard-sdk/example-per-user-budget": ["@guard-sdk/example-per-user-budget@workspace:examples/per-user-budget"],
 
     "@guard-sdk/openai": ["@guard-sdk/openai@workspace:packages/openai"],
 
@@ -468,8 +492,6 @@
 
     "@polka/url": ["@polka/url@1.0.0-next.29", "", {}, "sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww=="],
 
-    "@quansync/fs": ["@quansync/fs@1.0.0", "", { "dependencies": { "quansync": "^1.0.0" } }, "sha512-4TJ3DFtlf1L5LDMaM6CanJ/0lckGNtJcMjQ1NAV6zDmA0tEHKZtxNKin8EgPaVX1YzljbxckyT2tJrpQKAtngQ=="],
-
     "@rollup/pluginutils": ["@rollup/pluginutils@5.3.0", "", { "dependencies": { "@types/estree": "^1.0.0", "estree-walker": "^2.0.2", "picomatch": "^4.0.2" }, "peerDependencies": { "rollup": "^1.20.0||^2.0.0||^3.0.0||^4.0.0" }, "optionalPeers": ["rollup"] }, "sha512-5EdhGZtnu3V88ces7s53hhfK5KSASnJZv8Lulpc04cWO3REESroJXg73DFsOmgbU2BhwV0E20bu2IDZb3VKW4Q=="],
 
     "@rollup/rollup-android-arm-eabi": ["@rollup/rollup-android-arm-eabi@4.60.3", "", { "os": "android", "cpu": "arm" }, "sha512-x35CNW/ANXG3hE/EZpRU8MXX1JDN86hBb2wMGAtltkz7pc6cxgjpy1OMMfDosOQ+2hWqIkag/fGok1Yady9nGw=="],
@@ -610,8 +632,6 @@
 
     "argparse": ["argparse@2.0.1", "", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
 
-    "args-tokenizer": ["args-tokenizer@0.3.0", "", {}, "sha512-xXAd7G2Mll5W8uo37GETpQ2VrE84M181Z7ugHFGQnJZ50M2mbOv0osSZ9VsSgPfJQ+LVG0prSi0th+ELMsno7Q=="],
-
     "aria-query": ["aria-query@5.3.2", "", {}, "sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw=="],
 
     "array-iterate": ["array-iterate@2.0.1", "", {}, "sha512-I1jXZMjAgCMmxT4qxXfPXa6SthSoE8h6gkSI9BGGNv8mP8G/v0blc+qFnZu6K42vTOiuME596QaLO0TP3Lk0xg=="],
@@ -635,10 +655,6 @@
     "boolbase": ["boolbase@1.0.0", "", {}, "sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww=="],
 
     "buffer": ["buffer@5.7.1", "", { "dependencies": { "base64-js": "^1.3.1", "ieee754": "^1.1.13" } }, "sha512-EHcyIPBQ4BSGlvjB16k5KgAJ27CIsHY/2JBmCRReo48y9rQ3MaUzWX3KVlBa4U7MyX02HdVj0K7C3WaB3ju7FQ=="],
-
-    "bumpp": ["bumpp@11.1.0", "", { "dependencies": { "args-tokenizer": "^0.3.0", "cac": "^7.0.0", "jsonc-parser": "^3.3.1", "package-manager-detector": "^1.6.0", "semver": "^7.7.4", "tinyexec": "^1.1.2", "tinyglobby": "^0.2.16", "unconfig": "^7.5.0", "yaml": "^2.8.4" }, "bin": { "bumpp": "bin/bumpp.mjs" } }, "sha512-jdwOGMyX8JIqpQ0N2RMRR87DHZaoJnUtui5lU9LqFfFK5JC0H8qY9uWqXoa+dEWt/K7rOmmsoyiZB8RBM7RPBQ=="],
-
-    "cac": ["cac@7.0.0", "", {}, "sha512-tixWYgm5ZoOD+3g6UTea91eow5z6AAHaho3g0V9CNSNb45gM8SmflpAc+GRd1InC4AqN/07Unrgp56Y94N9hJQ=="],
 
     "ccount": ["ccount@2.0.1", "", {}, "sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg=="],
 
@@ -1010,8 +1026,6 @@
 
     "pump": ["pump@3.0.4", "", { "dependencies": { "end-of-stream": "^1.1.0", "once": "^1.3.1" } }, "sha512-VS7sjc6KR7e1ukRFhQSY5LM2uBWAUPiOPa/A3mkKmiMwSmRFUITt0xuj+/lesgnCv+dPIEYlkzrcyXgquIHMcA=="],
 
-    "quansync": ["quansync@1.0.0", "", {}, "sha512-5xZacEEufv3HSTPQuchrvV6soaiACMFnq1H8wkVioctoH3TRha9Sz66lOxRwPK/qZj7HPiSveih9yAyh98gvqA=="],
-
     "radix3": ["radix3@1.1.2", "", {}, "sha512-b484I/7b8rDEdSDKckSSBA8knMpcdsXudlE/LNL639wFoHKwLbEkQFZHWEYwDC0wa0FKUcCY+GAF73Z7wxNVFA=="],
 
     "rc": ["rc@1.2.8", "", { "dependencies": { "deep-extend": "^0.6.0", "ini": "~1.3.0", "minimist": "^1.2.0", "strip-json-comments": "~2.0.1" }, "bin": { "rc": "./cli.js" } }, "sha512-y3bGgqKj3QBdxLbLkomlohkvsA8gdAiUQlSBJnBhfn+BPxg4bc62d8TcBW15wavDfgexCgccckhcZvywyQYPOw=="],
@@ -1125,10 +1139,6 @@
     "ufo": ["ufo@1.6.4", "", {}, "sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA=="],
 
     "ultrahtml": ["ultrahtml@1.6.0", "", {}, "sha512-R9fBn90VTJrqqLDwyMph+HGne8eqY1iPfYhPzZrvKpIfwkWZbcYlfpsb8B9dTvBfpy1/hqAD7Wi8EKfP9e8zdw=="],
-
-    "unconfig": ["unconfig@7.5.0", "", { "dependencies": { "@quansync/fs": "^1.0.0", "defu": "^6.1.4", "jiti": "^2.6.1", "quansync": "^1.0.0", "unconfig-core": "7.5.0" } }, "sha512-oi8Qy2JV4D3UQ0PsopR28CzdQ3S/5A1zwsUwp/rosSbfhJ5z7b90bIyTwi/F7hCLD4SGcZVjDzd4XoUQcEanvA=="],
-
-    "unconfig-core": ["unconfig-core@7.5.0", "", { "dependencies": { "@quansync/fs": "^1.0.0", "quansync": "^1.0.0" } }, "sha512-Su3FauozOGP44ZmKdHy2oE6LPjk51M/TRRjHv2HNCWiDvfvCoxC2lno6jevMA91MYAdCdwP05QnWdWpSbncX/w=="],
 
     "uncrypto": ["uncrypto@0.1.3", "", {}, "sha512-Ql87qFHB3s/De2ClA9e0gsnS6zXG27SkTiSJwjCc9MebbfapQfuPzumMIUMi38ezPZVNFcHI9sUIepeQfw8J8Q=="],
 

@@ -251,3 +251,150 @@ test("supports sqlite logger in adapter config", async () => {
     await cleanup();
   }
 });
+
+test("passes a guard abort signal into the underlying create call", async () => {
+  let received: { signal?: AbortSignal } | undefined;
+  const client = {
+    chat: {
+      completions: {
+        create: async (_params: unknown, options?: { signal?: AbortSignal }) => {
+          received = options;
+          return { usage: { total_tokens: 1 } };
+        },
+      },
+    },
+  };
+
+  const guarded = createOpenAIGuard(client);
+  await guarded.chat.completions.create({ model: "gpt-4o-mini", messages: [] });
+
+  expect(received?.signal).toBeInstanceOf(AbortSignal);
+});
+
+test("wraps a streaming response and finalizes usage from the final chunk", async () => {
+  const chunks = [
+    { choices: [{ delta: { content: "a" } }] },
+    {
+      choices: [{ delta: { content: "b" } }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+    },
+  ];
+
+  async function* stream() {
+    for (const chunk of chunks) {
+      yield chunk;
+    }
+  }
+
+  const client = {
+    chat: {
+      completions: {
+        create: async () => stream(),
+      },
+    },
+  };
+
+  const logger = createMemoryLogger();
+  const guarded = createOpenAIGuard(client, { logger });
+
+  const result = (await guarded.chat.completions.create({
+    model: "gpt-4o-mini",
+    stream: true,
+  })) as AsyncIterable<unknown>;
+
+  const seen: unknown[] = [];
+  for await (const chunk of result) {
+    seen.push(chunk);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(seen).toHaveLength(2);
+
+  const logs = logger.getLogs();
+  expect(logs).toHaveLength(1);
+  expect(logs[0]?.totalTokens).toBe(15);
+});
+
+test("blocks a streaming request pre-call when the call budget is exhausted", async () => {
+  let created = false;
+  const client = {
+    chat: {
+      completions: {
+        create: async () => {
+          created = true;
+          return (async function* () {})();
+        },
+      },
+    },
+  };
+
+  const guarded = createOpenAIGuard(client, { maxCalls: 0 });
+
+  await expect(
+    guarded.chat.completions.create({ model: "gpt-4o-mini", stream: true }),
+  ).rejects.toBeInstanceOf(CallLimitExceededError);
+  expect(created).toBe(false);
+});
+
+test("defaults stream_options.include_usage for streaming requests", async () => {
+  let receivedParams: { stream_options?: unknown } | undefined;
+
+  async function* stream() {
+    yield { choices: [{ delta: { content: "a" } }] };
+  }
+
+  const client = {
+    chat: {
+      completions: {
+        create: async (params: unknown) => {
+          receivedParams = params as { stream_options?: unknown };
+          return stream();
+        },
+      },
+    },
+  };
+
+  const guarded = createOpenAIGuard(client);
+  const result = (await guarded.chat.completions.create({
+    model: "gpt-4o-mini",
+    stream: true,
+  })) as AsyncIterable<unknown>;
+
+  for await (const _chunk of result) {
+    // drain
+  }
+
+  expect(receivedParams?.stream_options).toEqual({ include_usage: true });
+});
+
+test("respects a caller-supplied stream_options.include_usage", async () => {
+  let receivedParams: { stream_options?: unknown } | undefined;
+
+  async function* stream() {
+    yield { choices: [{ delta: { content: "a" } }] };
+  }
+
+  const client = {
+    chat: {
+      completions: {
+        create: async (params: unknown) => {
+          receivedParams = params as { stream_options?: unknown };
+          return stream();
+        },
+      },
+    },
+  };
+
+  const guarded = createOpenAIGuard(client);
+  const result = (await guarded.chat.completions.create({
+    model: "gpt-4o-mini",
+    stream: true,
+    stream_options: { include_usage: false },
+  })) as AsyncIterable<unknown>;
+
+  for await (const _chunk of result) {
+    // drain
+  }
+
+  expect(receivedParams?.stream_options).toEqual({ include_usage: false });
+});

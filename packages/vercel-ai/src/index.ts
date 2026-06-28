@@ -1,5 +1,56 @@
-import { guard } from "@guard-sdk/core";
+import { createGuardAbortSignal, createGuardStreamRun, guard } from "@guard-sdk/core";
 import type { GuardConfig } from "@guard-sdk/core";
+
+/**
+ * Merges the guard's signal with a caller-supplied `params.abortSignal` so
+ * wrapping a call never silently disables the caller's own cancellation.
+ * Returns `undefined` only when neither side provides a signal.
+ */
+function combineAbortSignals(
+  primary: AbortSignal | undefined,
+  extra: unknown,
+): { signal: AbortSignal | undefined; dispose: () => void } {
+  const extraSignal = extra instanceof AbortSignal ? extra : undefined;
+
+  if (!primary) {
+    return { signal: extraSignal, dispose: () => {} };
+  }
+
+  if (!extraSignal) {
+    return { signal: primary, dispose: () => {} };
+  }
+
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+    return { signal: AbortSignal.any([primary, extraSignal]), dispose: () => {} };
+  }
+
+  const controller = new AbortController();
+  const cleanup: Array<() => void> = [];
+
+  const link = (source: AbortSignal) => {
+    if (source.aborted) {
+      controller.abort((source as { reason?: unknown }).reason);
+      return;
+    }
+
+    const onAbort = () => controller.abort((source as { reason?: unknown }).reason);
+    source.addEventListener("abort", onAbort, { once: true });
+    cleanup.push(() => source.removeEventListener("abort", onAbort));
+  };
+
+  link(primary);
+  link(extraSignal);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      for (const fn of cleanup) {
+        fn();
+      }
+
+      cleanup.length = 0;
+    },
+  };
+}
 
 export type VercelUsageLike = {
   promptTokens?: number;
@@ -294,13 +345,17 @@ function handleDefaultProperty(target: object, property: PropertyKey, receiver: 
 function wrapStreamResult<TStreamResult extends VercelStreamResultLike>(
   streamResult: TStreamResult,
   mergedConfig: GuardConfig,
+  onSettled: () => void = () => {},
 ): TStreamResult {
+  const streamRun = createGuardStreamRun(mergedConfig);
   let finalizePromise: Promise<void> | undefined;
 
-  const finalize = () => {
+  const finalize = (): Promise<void> => {
     if (!finalizePromise) {
-      finalizePromise = guard
-        .run(async () => readStreamUsage(streamResult), mergedConfig)
+      // Release the timeout/abort wiring as soon as the stream settles.
+      onSettled();
+      finalizePromise = streamRun
+        .then((run) => run.finish(() => readStreamUsage(streamResult)))
         .then(() => undefined);
     }
 
@@ -356,9 +411,15 @@ export function createVercelAIGuard<
 
       let response: TGenerateTextResult | undefined;
 
-      await guard.run(async () => {
-        response = await generateTextOriginal(params);
-        return usageFromGenerateTextResult(response) ?? response;
+      await guard.run(async ({ signal }) => {
+        const combined = combineAbortSignals(signal, params.abortSignal);
+
+        try {
+          response = await generateTextOriginal({ ...params, abortSignal: combined.signal });
+          return usageFromGenerateTextResult(response) ?? response;
+        } finally {
+          combined.dispose();
+        }
       }, mergedConfig);
 
       return response as TGenerateTextResult;
@@ -372,8 +433,18 @@ export function createVercelAIGuard<
         model,
       };
 
-      const streamResult = streamTextOriginal(params);
-      return wrapStreamResult(streamResult, mergedConfig);
+      // Build a timeout-aware signal (streamText is not wrapped by guard.run,
+      // so timeoutMs would otherwise never abort the stream) and merge it with
+      // any caller-supplied abortSignal so neither cancellation path is lost.
+      const { signal, dispose } = createGuardAbortSignal(mergedConfig);
+      const combined = combineAbortSignals(signal, params.abortSignal);
+      const streamParams = combined.signal ? { ...params, abortSignal: combined.signal } : params;
+      const streamResult = streamTextOriginal(streamParams);
+
+      return wrapStreamResult(streamResult, mergedConfig, () => {
+        combined.dispose();
+        dispose();
+      });
     },
   };
 }

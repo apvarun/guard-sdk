@@ -77,3 +77,41 @@ test("createPricingResolverWithDefaults keeps key normalization parity", () => {
     outputPerMillionTokens: 8,
   });
 });
+
+test("default catalog covers current OpenAI, Anthropic, and Google models", () => {
+  expect(getModelPricing("openai", "gpt-4o")).toMatchObject({
+    inputPerMillionTokens: 2.5,
+    outputPerMillionTokens: 10,
+  });
+  expect(getModelPricing("anthropic", "claude-sonnet-4")).toMatchObject({
+    inputPerMillionTokens: 3,
+    outputPerMillionTokens: 15,
+  });
+  expect(getModelPricing("google", "gemini-2.5-pro")).toMatchObject({
+    inputPerMillionTokens: 1.25,
+    outputPerMillionTokens: 10,
+  });
+});
+
+test("stale OpenAI o-series defaults are not bundled", () => {
+  expect(getModelPricing("openai", "o3")).toBeUndefined();
+  expect(getModelPricing("openai", "o3-mini")).toBeUndefined();
+  expect(getModelPricing("openai", "o4-mini")).toBeUndefined();
+});
+
+test("Gemini 2.5 Pro resolves tiered pricing from context", () => {
+  expect(getModelPricing("google", "gemini-2.5-pro", { inputTokens: 200_000 })).toMatchObject({
+    inputPerMillionTokens: 1.25,
+    outputPerMillionTokens: 10,
+  });
+
+  expect(getModelPricing("google", "gemini-2.5-pro", { inputTokens: 200_001 })).toMatchObject({
+    inputPerMillionTokens: 2.5,
+    outputPerMillionTokens: 15,
+  });
+});
+
+test("default catalog lookup is case- and whitespace-insensitive", () => {
+  expect(getModelPricing("OpenAI", "  GPT-4O  ")).toBeDefined();
+  expect(getModelPricing("anthropic", "claude-unknown-model")).toBeUndefined();
+});

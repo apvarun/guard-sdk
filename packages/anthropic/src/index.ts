@@ -1,4 +1,4 @@
-import { guard } from "@guard-sdk/core";
+import { createGuardAbortSignal, createGuardStreamRun, guard } from "@guard-sdk/core";
 import type { GuardConfig } from "@guard-sdk/core";
 
 export type AnthropicMessageCreateParams = {
@@ -22,6 +22,11 @@ export type AnthropicMessageStreamLike<TFinalMessage extends AnthropicMessageLik
   [key: string]: unknown;
 };
 
+export type AnthropicRequestOptions = {
+  signal?: AbortSignal;
+  [key: string]: unknown;
+};
+
 export type AnthropicClientLike<
   TCreateParams extends AnthropicMessageCreateParams,
   TCreateResponse extends AnthropicMessageLike,
@@ -29,8 +34,8 @@ export type AnthropicClientLike<
   TStreamResult extends AnthropicMessageStreamLike<TCreateResponse>,
 > = {
   messages: {
-    create: (params: TCreateParams) => Promise<TCreateResponse>;
-    stream: (params: TStreamParams) => TStreamResult;
+    create: (params: TCreateParams, options?: AnthropicRequestOptions) => Promise<TCreateResponse>;
+    stream: (params: TStreamParams, options?: AnthropicRequestOptions) => TStreamResult;
   };
 };
 
@@ -77,29 +82,35 @@ function hasUntilDone<TFinalMessage extends AnthropicMessageLike>(
 function wrapAnthropicStream<TFinalMessage extends AnthropicMessageLike, TStreamResult>(
   stream: TStreamResult,
   mergedConfig: GuardConfig,
+  onSettled: () => void = () => {},
 ): TStreamResult {
   const streamLike = stream as AnthropicMessageStreamLike<TFinalMessage>;
+  const streamRun = createGuardStreamRun(mergedConfig);
   let finalizePromise: Promise<TFinalMessage | { usage: { total_tokens: number } }> | undefined;
 
   const ensureFinalized = () => {
     if (!finalizePromise) {
-      finalizePromise = guard
-        .run(async () => {
-          if (hasFinalMessage(streamLike)) {
-            return await streamLike.finalMessage();
-          }
+      // Release the timeout/abort wiring as soon as the stream settles.
+      onSettled();
+      finalizePromise = streamRun
+        .then((run) =>
+          run.finish(async () => {
+            if (hasFinalMessage(streamLike)) {
+              return await streamLike.finalMessage();
+            }
 
-          if (hasUntilDone(streamLike)) {
-            await streamLike.untilDone();
-          }
+            if (hasUntilDone(streamLike)) {
+              await streamLike.untilDone();
+            }
 
-          return {
-            usage: {
-              total_tokens: 0,
-            },
-          };
-        }, mergedConfig)
-        .then((result) => result.data);
+            return {
+              usage: {
+                total_tokens: 0,
+              },
+            };
+          }),
+        )
+        .then((result) => result);
     }
 
     return finalizePromise;
@@ -152,7 +163,7 @@ export function createAnthropicGuard<
         };
 
         const { data } = await guard.run(
-          async () => createOriginal.call(client.messages, params),
+          async ({ signal }) => createOriginal.call(client.messages, params, { signal }),
           mergedConfig,
         );
 
@@ -167,8 +178,12 @@ export function createAnthropicGuard<
           model,
         };
 
-        const stream = streamOriginal.call(client.messages, params);
-        return wrapAnthropicStream<TCreateResponse, TStreamResult>(stream, mergedConfig);
+        // Pass a timeout-aware signal so `timeoutMs` can actually abort an
+        // in-flight stream (it is otherwise only enforced inside `guard.run`,
+        // which does not wrap the eagerly-created stream).
+        const { signal, dispose } = createGuardAbortSignal(mergedConfig);
+        const stream = streamOriginal.call(client.messages, params, { signal });
+        return wrapAnthropicStream<TCreateResponse, TStreamResult>(stream, mergedConfig, dispose);
       },
     },
   };

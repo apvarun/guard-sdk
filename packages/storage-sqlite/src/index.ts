@@ -1,9 +1,17 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import Database from "better-sqlite3";
-import type { GuardLogger, GuardStatus, GuardUsage } from "@guard-sdk/core";
+import type {
+  BudgetCommitOptions,
+  BudgetCommitResult,
+  BudgetSnapshot,
+  GuardLogger,
+  GuardStatus,
+  GuardUsage,
+} from "@guard-sdk/core";
 
 const DEFAULT_TABLE_NAME = "guard_usage";
+const DEFAULT_BUDGET_TABLE_NAME = "guard_budget";
 const DEFAULT_MAX_PENDING_WRITES = 1000;
 
 const SQLITE_WRITE_QUEUE_FULL_ERROR = "SQLITE_WRITE_QUEUE_FULL";
@@ -365,6 +373,199 @@ INSERT INTO ${tableIdentifier} (
         .then(() => {
           closeDatabase();
         });
+    },
+  };
+}
+
+export type SQLiteBudgetStoreOptions = {
+  dbPath: string;
+  mkdir?: boolean;
+  tableName?: string;
+};
+
+export type SQLiteBudgetStore = {
+  get: (key: string) => BudgetSnapshot;
+  add: (key: string, delta: BudgetSnapshot) => void;
+  commit: (key: string, delta: BudgetSnapshot, options?: BudgetCommitOptions) => BudgetCommitResult;
+  close: () => void;
+};
+
+type BudgetRow = {
+  costUsd: number;
+  totalTokens: number;
+  calls: number;
+};
+
+function addBudgetSnapshots(current: BudgetSnapshot, delta: BudgetSnapshot): BudgetSnapshot {
+  return {
+    costUsd: current.costUsd + (delta.costUsd ?? 0),
+    totalTokens: current.totalTokens + (delta.totalTokens ?? 0),
+    calls: current.calls + (delta.calls ?? 0),
+  };
+}
+
+function exceedsBudgetSnapshot(
+  snapshot: BudgetSnapshot,
+  limits: Partial<BudgetSnapshot> | undefined,
+) {
+  return (
+    (limits?.costUsd !== undefined && snapshot.costUsd > limits.costUsd) ||
+    (limits?.totalTokens !== undefined && snapshot.totalTokens > limits.totalTokens) ||
+    (limits?.calls !== undefined && snapshot.calls > limits.calls)
+  );
+}
+
+function createBudgetSchemaSql(tableName: string) {
+  const tableIdentifier = sqlIdentifier(tableName);
+
+  return `
+CREATE TABLE IF NOT EXISTS ${tableIdentifier} (
+  budget_key TEXT PRIMARY KEY,
+  cost_usd REAL NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  calls INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+`;
+}
+
+/**
+ * Creates a persistent BudgetStore backed by SQLite. Cumulative spend
+ * survives process restarts, so per-user budgets stay enforced across runs.
+ */
+export async function createSQLiteBudgetStore(
+  options: SQLiteBudgetStoreOptions,
+): Promise<SQLiteBudgetStore> {
+  const tableName = options.tableName ?? DEFAULT_BUDGET_TABLE_NAME;
+  validateTableName(tableName);
+
+  const dbPath = resolveSafeFilePath(options.dbPath, "dbPath");
+
+  if (options.mkdir ?? true) {
+    await mkdir(dirname(dbPath), { recursive: true });
+  }
+
+  let database: Database.Database | undefined;
+
+  try {
+    database = new Database(dbPath);
+    database.exec(createBudgetSchemaSql(tableName));
+  } catch (error) {
+    if (database) {
+      try {
+        database.close();
+      } catch {
+        // ignore close errors during init failure.
+      }
+    }
+
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to initialize SQLite budget store at "${dbPath}": ${reason}`);
+  }
+
+  const tableIdentifier = sqlIdentifier(tableName);
+
+  const selectStatement = database.prepare(`
+SELECT cost_usd AS costUsd, total_tokens AS totalTokens, calls AS calls
+FROM ${tableIdentifier}
+WHERE budget_key = @key;
+`);
+
+  const upsertStatement = database.prepare(`
+INSERT INTO ${tableIdentifier} (budget_key, cost_usd, total_tokens, calls, updated_at)
+VALUES (@key, @costUsd, @totalTokens, @calls, @updatedAt)
+ON CONFLICT(budget_key) DO UPDATE SET
+  cost_usd = cost_usd + excluded.cost_usd,
+  total_tokens = total_tokens + excluded.total_tokens,
+  calls = calls + excluded.calls,
+  updated_at = excluded.updated_at;
+`);
+
+  let isClosed = false;
+
+  const readSnapshot = (key: string): BudgetSnapshot => {
+    const row = selectStatement.get({ key }) as BudgetRow | undefined;
+
+    if (!row) {
+      return { costUsd: 0, totalTokens: 0, calls: 0 };
+    }
+
+    return {
+      costUsd: Number(row.costUsd) || 0,
+      totalTokens: Number(row.totalTokens) || 0,
+      calls: Number(row.calls) || 0,
+    };
+  };
+
+  const commitTransaction = database.transaction(
+    (
+      key: string,
+      delta: BudgetSnapshot,
+      options: BudgetCommitOptions | undefined,
+    ): BudgetCommitResult => {
+      const current = readSnapshot(key);
+      const next = addBudgetSnapshots(current, delta);
+
+      if (exceedsBudgetSnapshot(next, options?.rejectIfExceeded)) {
+        return {
+          snapshot: current,
+          rejected: true,
+        };
+      }
+
+      upsertStatement.run({
+        key,
+        costUsd: delta.costUsd ?? 0,
+        totalTokens: delta.totalTokens ?? 0,
+        calls: delta.calls ?? 0,
+        updatedAt: new Date().toISOString(),
+      });
+
+      return {
+        snapshot: next,
+        rejected: false,
+      };
+    },
+  );
+
+  return {
+    get(key: string): BudgetSnapshot {
+      if (isClosed) {
+        // Returning a zero snapshot here would silently reset the baseline and
+        // let an over-budget key slip through; surface the misuse instead.
+        throw new Error("SQLite budget store is closed.");
+      }
+
+      return readSnapshot(key);
+    },
+    add(key: string, delta: BudgetSnapshot) {
+      if (isClosed) {
+        // Dropping the write silently would lose spend; surface the misuse.
+        throw new Error("SQLite budget store is closed.");
+      }
+
+      upsertStatement.run({
+        key,
+        costUsd: delta.costUsd ?? 0,
+        totalTokens: delta.totalTokens ?? 0,
+        calls: delta.calls ?? 0,
+        updatedAt: new Date().toISOString(),
+      });
+    },
+    commit(key: string, delta: BudgetSnapshot, options?: BudgetCommitOptions) {
+      if (isClosed) {
+        throw new Error("SQLite budget store is closed.");
+      }
+
+      return commitTransaction(key, delta, options);
+    },
+    close() {
+      if (isClosed) {
+        return;
+      }
+
+      isClosed = true;
+      database.close();
     },
   };
 }

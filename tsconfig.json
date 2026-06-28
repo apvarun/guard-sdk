@@ -3,6 +3,17 @@
     "noEmit": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "paths": {
+      "@guard-sdk/anthropic": ["./packages/anthropic/src/index.ts"],
+      "@guard-sdk/budget": ["./packages/budget/src/index.ts"],
+      "@guard-sdk/cli": ["./packages/cli/src/index.ts"],
+      "@guard-sdk/core": ["./packages/core/src/index.ts"],
+      "@guard-sdk/openai": ["./packages/openai/src/index.ts"],
+      "@guard-sdk/otel": ["./packages/otel/src/index.ts"],
+      "@guard-sdk/pricing": ["./packages/pricing/src/index.ts"],
+      "@guard-sdk/storage-sqlite": ["./packages/storage-sqlite/src/index.ts"],
+      "@guard-sdk/vercel-ai": ["./packages/vercel-ai/src/index.ts"]
+    },
     "allowImportingTsExtensions": true,
     "esModuleInterop": true
   }

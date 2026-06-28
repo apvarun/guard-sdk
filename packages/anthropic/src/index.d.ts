@@ -17,10 +17,14 @@ export type AnthropicMessageStreamLike<TFinalMessage extends AnthropicMessageLik
     untilDone?: () => Promise<void>;
     [key: string]: unknown;
 };
+export type AnthropicRequestOptions = {
+    signal?: AbortSignal;
+    [key: string]: unknown;
+};
 export type AnthropicClientLike<TCreateParams extends AnthropicMessageCreateParams, TCreateResponse extends AnthropicMessageLike, TStreamParams extends AnthropicMessageCreateParams, TStreamResult extends AnthropicMessageStreamLike<TCreateResponse>> = {
     messages: {
-        create: (params: TCreateParams) => Promise<TCreateResponse>;
-        stream: (params: TStreamParams) => TStreamResult;
+        create: (params: TCreateParams, options?: AnthropicRequestOptions) => Promise<TCreateResponse>;
+        stream: (params: TStreamParams, options?: AnthropicRequestOptions) => TStreamResult;
     };
 };
 export type AnthropicGuardConfig = Omit<GuardConfig, "provider" | "model"> & {

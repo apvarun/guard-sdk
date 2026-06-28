@@ -22,7 +22,10 @@ AI agents can burn through budgets fast. A single runaway loop costs hundreds of
 - Cost limits with USD budgeting
 - Token limits with provider-aware counting
 - Call limits for rate control
-- Timeout enforcement
+- Timeout enforcement with real `AbortSignal` cancellation
+- Per-user cumulative budgets across runs
+- Lifecycle hooks and soft cost/token warnings
+- Config validation with actionable errors
 - Dry-run mode for testing
 - Multiple logging backends (JSON, SQLite, OTEL)
 - Provider adapters (OpenAI, Anthropic, Vercel AI)
@@ -31,6 +34,7 @@ AI agents can burn through budgets fast. A single runaway loop costs hundreds of
 
 - `@guard-sdk/core`: generic guard runtime (`guard.run`, `guard.createRun`)
 - `@guard-sdk/pricing`: pricing resolver utilities
+- `@guard-sdk/budget`: cross-run, per-user budget stores (`createMemoryBudgetStore`)
 - `@guard-sdk/openai`: OpenAI chat completions adapter
 - `@guard-sdk/anthropic`: Anthropic messages adapter (create + stream finalization)
 - `@guard-sdk/vercel-ai`: Vercel AI SDK adapter (`generateText`, `streamText`)
@@ -154,6 +158,78 @@ console.log(result.usage.wouldBlockReasons); // e.g. ["TOKEN_LIMIT_EXCEEDED"]
 ```
 
 Dry-run does not suppress timeout or runtime failures. Those still reject with the original error path.
+
+## Per-user budgets (v0.6)
+
+Per-run limits cap a single call; a `BudgetStore` caps a user's spend **across runs**. Pair a store
+with `maxUserCostUsd` / `maxUserTokens` / `maxUserCalls` and a `userId` (or explicit `budgetKey`).
+
+```ts
+import { guard } from "@guard-sdk/core";
+import { createMemoryBudgetStore } from "@guard-sdk/budget";
+
+const budget = createMemoryBudgetStore();
+
+await guard.run(callLLM, {
+  userId: "user-123",
+  budget,
+  maxUserCostUsd: 5, // total across all of this user's runs
+  maxUserCalls: 1_000, // optional: cap the number of calls across runs
+  budgetWindow: "month", // optional: "day" | "month" | "total" (default)
+});
+```
+
+Use `createSQLiteBudgetStore({ dbPath })` from `@guard-sdk/storage-sqlite` to persist budgets across
+restarts.
+
+Per-user limits require a store that supports atomic commits — both built-in stores do, and a custom
+`BudgetStore` must implement `commit`. Enforcement is race-safe across concurrent runs: `maxUserCalls`
+is reserved **before** the call, so that limit is exact. `maxUserCostUsd` / `maxUserTokens` are
+checked **after** the call against the atomically committed total; since you can't un-spend tokens a
+call has already returned, the total may overshoot those limits by at most one in-flight call (the run
+that crosses the limit is blocked). If the budget store itself is unavailable — for example, closed or
+disk full — the run fails rather than proceeding: guard fails closed on budget enforcement.
+
+## Lifecycle hooks and warnings (v0.6)
+
+Hooks observe a run; a throwing hook is caught and never breaks the guarded call. Soft thresholds
+emit non-blocking warnings.
+
+```ts
+await guard.run(callLLM, {
+  warnAtCostUsd: 0.5, // populates usage.warnings and fires onWarn, without blocking
+  hooks: {
+    onStart: (usage) => {},
+    onCall: (usage) => {},
+    onRetry: (usage) => {},
+    onBlock: (usage, error) => {}, // error.code is the policy reason
+    onWarn: (usage, warning) => {},
+    onFinish: (usage) => {},
+  },
+});
+```
+
+## Cancellation (v0.6)
+
+On timeout, or when a caller-supplied `signal` aborts, guard aborts the in-flight provider request.
+The guarded function receives an `AbortSignal`, and the adapters forward it to the provider SDK.
+
+```ts
+const controller = new AbortController();
+
+const result = guard.run(({ signal }) => callLLM({ signal }), {
+  timeoutMs: 30_000,
+  signal: controller.signal,
+});
+
+controller.abort(); // cancels the in-flight request
+```
+
+## Config validation (v0.6)
+
+`guard.run` / `guard.createRun` validate the config first and throw a `GuardConfigError` (with the
+offending field) for invalid values such as negative limits or a `warnAt*` above its hard limit.
+Blocked-run errors include the limit and the actual value (e.g. `Token limit exceeded: 1200 token(s), limit is 1000.`).
 
 ## Token and cost semantics
 
@@ -407,6 +483,8 @@ for await (const chunk of streamed.textStream) {
 - `examples/basic-anthropic` - Anthropic adapter integration
 - `examples/basic-vercel-ai` - Vercel AI SDK adapter integration
 - `examples/basic-otel` - OpenTelemetry logging setup
+- `examples/hooks` - Lifecycle hooks and soft warnings
+- `examples/per-user-budget` - Per-user cumulative budgets across runs
 
 Run examples:
 

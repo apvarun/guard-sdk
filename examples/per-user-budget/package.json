@@ -1,0 +1,14 @@
+{
+  "name": "@guard-sdk/example-per-user-budget",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node ./index.mjs",
+    "build": "node --check ./index.mjs",
+    "test": "node --check ./index.mjs"
+  },
+  "dependencies": {
+    "@guard-sdk/budget": "workspace:*",
+    "@guard-sdk/core": "workspace:*"
+  }
+}

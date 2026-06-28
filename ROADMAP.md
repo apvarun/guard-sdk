@@ -2,19 +2,14 @@
 
 ## Current State
 
-- v0.5 is complete.
+- v0.6 is complete.
 - Core runtime, dry-run mode, pricing resolver, and logging are shipped.
 - OpenAI, Anthropic, and Vercel AI adapters are shipped with parity tests.
 - SQLite storage, CLI reporting, and OpenTelemetry integration are shipped.
+- Per-user cumulative budgets, lifecycle hooks, AbortSignal cancellation, config
+  validation, and soft warnings are shipped.
 
 ## Release Plan
-
-### v0.6: Hardening and Validation
-
-- Expand cross-package integration tests.
-- Harden configuration validation for runtime and loggers.
-- Improve error messages with actionable context.
-- Add SQLite performance baseline tests.
 
 ### v0.7: Extensibility
 

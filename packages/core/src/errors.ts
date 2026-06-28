@@ -43,3 +43,14 @@ export class TimeoutError extends GuardError {
     this.name = "TimeoutError";
   }
 }
+
+export class GuardConfigError extends GuardError {
+  /** The configuration field that failed validation, when known. */
+  readonly field?: string;
+
+  constructor(message = "Invalid guard configuration", field?: string) {
+    super("INVALID_CONFIG", message);
+    this.name = "GuardConfigError";
+    this.field = field;
+  }
+}
